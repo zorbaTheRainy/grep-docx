@@ -37,6 +37,22 @@ def setup_logging(debug=False):
     level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(format='%(levelname)s: %(message)s', level=level)
 
+def make_hyperlink(path, label=None):
+    """
+    Wrap `path` in an OSC 8 hyperlink sequence.
+    - path: filesystem path to your .docx
+    - label: visible text; defaults to path
+    """
+    # Ensure absolute URI
+    uri = f"file://{os.path.abspath(path)}"
+    label = label or path
+    # OSC 8 sequence: \033]8;;URI\033\\TEXT\033]8;;\033\\
+    return (
+        f"\033]8;;{uri}\033\\"
+        f"{label}"
+        f"\033]8;;\033\\"
+    )
+
 def colorize(text, color_code):
     """Wrap text in ANSI color codes."""
     return f"\033[{color_code}m{text}\033[0m"
@@ -70,10 +86,15 @@ def search_file(file_path, regex, config):
             if regex.search(para.text):
                 matched = True
 
-                if config["quiet"] or config["list_unmatched_files"]:
+                if config["quiet"] or config["list_unmatched_files"] or (config["list_matched_files"] and not config["count"]):
                     return matches, matched  # exit ASAP if quiet mode is enabled or all we care about is if there was a match
 
-                prefix = f"{file_path} [Paragraph {i+1}]: "
+                if config.get("hyperlink"):
+                    hyper_path = make_hyperlink(file_path)
+                    prefix = f"{hyper_path} [Paragraph {i+1}]: "
+                else:
+                    prefix = f"{file_path} [Paragraph {i+1}]: "
+
                 if config.get("color"):
                     prefix_colored = colorize(prefix, COLORS['GREEN'])  # Color for prefix
                     para_text = highlight_matches(
@@ -88,7 +109,10 @@ def search_file(file_path, regex, config):
 
                 if config.get("hanging_indent"):
                     term_width = shutil.get_terminal_size((80, 20)).columns
-                    wrap_width = term_width - len(prefix)
+                    naked_prefix = f"{file_path} [Paragraph {i+1}]: " # prefix without any control characters
+                    wrap_width = term_width - len(naked_prefix)
+                    if wrap_width < 40:
+                        wrap_width = 40  # minimum wrap width to avoid excessive wrapping
                     indent = "\t"
                     wrapped_text = textwrap.fill(
                         para_text,
@@ -105,8 +129,6 @@ def search_file(file_path, regex, config):
                 logging.debug(f"Match found in {file_path} at paragraph {i+1}")
     except Exception as e:
         logging.error(f"Error reading {file_path}: {e}")
-    # logging.debug(f"matched: {matched}")
-    # logging.debug(f"matches: {matches}")
     return matches, matched
 
 def grep_docx(config):
@@ -130,8 +152,7 @@ def grep_docx(config):
             file_matches, matched = search_file(full_path, regex, config)
             if matched:
                 if config["quiet"]:
-                    # exit with status 0 (success)
-                    sys.exit(0)
+                    sys.exit(0) # exit with status 0 (success)
                 match_count += len(file_matches)
                 matched_files[full_path] = len(file_matches)
                 matches.extend(file_matches)
@@ -146,8 +167,7 @@ def grep_docx(config):
                     file_matches, matched = search_file(full_path, regex, config)
                     if matched:
                         if config["quiet"]:
-                            # exit with status 0 (success)
-                            sys.exit(0)
+                            sys.exit(0) # exit with status 0 (success)
                         match_count += len(file_matches)
                         matched_files[full_path] = len(file_matches)
                         matches.extend(file_matches)
@@ -160,23 +180,24 @@ def grep_docx(config):
         return
 
     if config["quiet"]:
-        # exit with status 1 (failure)
-        sys.exit(1)
-    # elif config["output"]:
-    #     with open(config["output"], 'w', encoding='utf-8') as f:
-    #         for line in matches:
-    #             f.write(line + '\n')
+        sys.exit(1)  # exit with status 1 (failure)
     elif config["list_unmatched_files"]:
-        for f in unmatched_files:
-            print(f)
-    elif config["list_matched_files"]:
-        if config["count"]:
-            for f, cnt in matched_files.items():
-                print(f"{f}: {cnt}")
-            print(match_count)
+        if config["hyperlink"]:
+            for f in unmatched_files:
+                print(make_hyperlink(f))
         else:
-            for f, cnt in matched_files.items():
+            for f in unmatched_files:
+                print(f)
+    elif config["list_matched_files"]:
+        for f, cnt in matched_files.items():
+            if config["hyperlink"]:
+                f = make_hyperlink(f)
+            if config["count"]:
+                print(f"{f}: {cnt}")
+            else:
                 print(f"{f}")
+        if config["count"]:
+            print(match_count)
     elif config["count"]:
         print(match_count)
     else:
@@ -188,16 +209,16 @@ def main():
     parser = argparse.ArgumentParser(description="Search for PATTERN in .docx files like grep.")
     parser.add_argument("pattern", help="Regex pattern to search for")
     parser.add_argument("path", help="File or directory to search")
-    parser.add_argument("-i", "--ignore-case", action="store_true", help="Ignore case distinctions")
-    parser.add_argument("-r", "--recursive", action="store_true", help="Recursively search subdirectories")
-    # parser.add_argument("-o", "--output", help="Write results to a file instead of stdout")
+    parser.add_argument("-C", "--color", "--colour", action="store_true", help="Color the prefix and highlight matches")
     parser.add_argument("-c", "--count", action="store_true", help="Only print a count of matching lines")
+    parser.add_argument("-H", "--hyperlink", action="store_true", help="The name of each file is printed as a hyperlink that launches Word.  (Your terminal may not support this.)")
+    parser.add_argument("-I", "--hanging-indent", action="store_true", help="Line output after the 1st line starts with a tab character")
+    parser.add_argument("-i", "--ignore-case", action="store_true", help="Ignore case distinctions")
     parser.add_argument("-l", "--files-with-matches", action="store_true", help="Only print names of files with matches")
     parser.add_argument("-L", "--files-without-matches", action="store_true", help="Only print names of files without matches")
     parser.add_argument("-q", "--quiet", "--silent", action="store_true", help="Suppress all normal output")
+    parser.add_argument("-r", "--recursive", action="store_true", help="Recursively search subdirectories")
     parser.add_argument("-T", "--initial-tab", action="store_true", help="Line output starts with a tab character")
-    parser.add_argument("-I", "--hanging-indent", action="store_true", help="Line output after the 1st line starts with a tab character")
-    parser.add_argument("-C", "--color", "--colour", action="store_true", help="Color the prefix and highlight matches")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
@@ -205,16 +226,16 @@ def main():
     config = {
         "pattern": args.pattern,
         "path": args.path,
-        "ignore_case": args.ignore_case,
-        "recursive": args.recursive,
-        # "output": args.output,
+        "color": args.color,
         "count": args.count,
+        "hanging_indent": args.hanging_indent,
+        "hyperlink": args.hyperlink,
+        "ignore_case": args.ignore_case,
+        "initial_tab": args.initial_tab,
         "list_matched_files": args.files_with_matches,
         "list_unmatched_files": args.files_without_matches,
         "quiet": args.quiet,
-        "hanging_indent": args.hanging_indent,
-        "initial_tab": args.initial_tab,
-        "color": args.color
+        "recursive": args.recursive
     }
     grep_docx(config)
 
