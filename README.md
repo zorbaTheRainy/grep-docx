@@ -30,7 +30,7 @@ pip install python-docx
 ## Usage
 
 ```bash
-grep-docx PATTERN PATH [options]
+grep-docx [options] PATTERN PATH 
 ```
 
 ### Arguments
@@ -42,13 +42,13 @@ grep-docx PATTERN PATH [options]
 
 - `-i, --ignore-case`: Ignore case distinctions
 - `-r, --recursive`: Recursively search subdirectories
-- `-o, --output FILE`: Write results to a file instead of stdout
 - `-c, --count`: Only print a count of matching lines
 - `-l, --files-with-matches`: Only print names of files with matches
+- `-L, --files-without-matches`: Only print names of files without matches
 - `-q, --quiet, --silent`: Suppress all normal output
 - `-T, --initial-tab`: Line output starts with a tab character
 - `-I, --hanging_indent`: Line output after the 1st line starts with a tab character
-- `-C, --color`: Color the prefix and highlight matches
+- `-C, --color, --colour`: Color the prefix and highlight matches
 - `-V, --version`: Show program version
 - `--debug`: Enable debug logging
 
@@ -61,7 +61,7 @@ grep-docx "pattern" document.docx
 
 Search recursively with case insensitive matching:
 ```bash
-grep-docx -r -i "pattern" ./documents/
+grep-docx -ri "pattern" ./documents/
 ```
 
 Count matches in a directory:
