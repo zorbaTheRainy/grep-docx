@@ -43,7 +43,7 @@ grep-docx [options] PATTERN PATH
 - `-C, --color, --colour`: Color the prefix and highlight matches
 - `-c, --count`: Only print a count of matching lines
 - `-H, --hyperlink`: The name of each file is printed as a hyperlink that launches Word.  (Your terminal may not support this.)
-- `-I, --hanging_indent`: Line output after the 1st line starts with a tab character
+- `-I, --hanging-indent`: Line output after the 1st line starts with a tab character
 - `-i, --ignore-case`: Ignore case distinctions
 - `-l, --files-with-matches`: Only print names of files with matches
 - `-L, --files-without-matches`: Only print names of files without matches
