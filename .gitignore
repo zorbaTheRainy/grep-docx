@@ -8,3 +8,5 @@ tmp*.*
 # ignore MacOS crap
 .DS_Store
 
+test
+*.bak
