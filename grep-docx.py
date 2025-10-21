@@ -36,7 +36,7 @@ COLORS = { # ANSI color codes
 
 # -----------------------------------------------------------------------
 def parse_args():
-    """Parses command-line arguments and initiates the grep-like search."""
+    """Parses command-line arguments."""
     parser = argparse.ArgumentParser(description="Search for PATTERN in .docx files like grep.")
     parser.add_argument("pattern", help="Regex pattern to search for")
     parser.add_argument("path", help="File or directory to search")
@@ -49,6 +49,7 @@ def parse_args():
     parser.add_argument("-L", "--files-without-matches", action="store_true", help="Only print names of files without matches")
     parser.add_argument("-q", "--quiet", "--silent", action="store_true", help="Suppress all normal output")
     parser.add_argument("-r", "--recursive", action="store_true", help="Recursively search subdirectories")
+    parser.add_argument("-s", "--no-messages", action="store_true", help="Suppress error messages about nonexistent or unreadable files.")
     parser.add_argument("-T", "--initial-tab", action="store_true", help="Line output starts with a tab character")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
@@ -92,7 +93,8 @@ def main():
                 break
 
     else:
-        logging.error(f"Invalid path: {path}")
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Invalid path: {path}")
         sys.exit(1) # exit with status 1 (failure)
 
     #  finally, print results
@@ -187,18 +189,16 @@ def search_file(file_path, regex, args):
 
                 if args.hanging_indent:
                     term_width = shutil.get_terminal_size((80, 20)).columns
-                    naked_prefix = f"{file_path} [Paragraph {i+1}]: " # prefix without any control characters
-                    wrap_width = term_width - len(naked_prefix)
-                    if wrap_width < 40:
-                        wrap_width = 40  # minimum wrap width to avoid excessive wrapping
+                    wrap_width = term_width - 8
                     indent = "\t"
                     wrapped_text = textwrap.fill(
                         para_text,
                         width=wrap_width,
-                        initial_indent='',
-                        subsequent_indent=indent
+                        initial_indent=indent,
+                        subsequent_indent=indent,
+                        break_on_hyphens=False
                     )
-                    formatted_line = prefix_colored + wrapped_text
+                    formatted_line = prefix_colored + os.linesep + wrapped_text
                     matches.append(formatted_line)
                 else:
                     formatted_line = prefix_colored + para_text
@@ -206,7 +206,8 @@ def search_file(file_path, regex, args):
 
                 logging.debug(f"Match found in {file_path} at paragraph {i+1}")
     except Exception as e:
-        logging.error(f"Error reading {file_path}: {e}")
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Error reading {file_path}: {e}")
 
     return matches, matched
 
