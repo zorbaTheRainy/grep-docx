@@ -177,9 +177,7 @@ def search_file(file_path, regex, args):
 
                 if args.color:
                     prefix_colored = colorize(prefix, COLORS['GREEN'])  # Color for prefix
-                    para_text = highlight_matches(
-                        para.text, regex.pattern, COLORS['RED'], args.ignore_case # Color for match
-                    )  
+                    para_text = highlight_matches(para.text, regex.pattern, COLORS['RED'], args.ignore_case) # Color for match
                 else:
                     prefix_colored = prefix
                     para_text = para.text
@@ -255,13 +253,14 @@ def print_results(results, args):
           args.files_without_matches, args.hyperlink, etc.
     """
     # unpack results to renamed variables
-    match_count = results["match_count"]
-    matched_files = results["matched_files"]
-    matches = results["matches"]
+    match_count     = results["match_count"]
+    matched_files   = results["matched_files"]
+    matches         = results["matches"]
     unmatched_files = results["unmatched_files"]
     
     # actually print
     if args.quiet:
+        # if we got here and quiet-mode is on, we found nothing; so, it is a failure
         sys.exit(1)  # exit with status 1 (failure)
     elif args.files_without_matches:
         if args.hyperlink:
