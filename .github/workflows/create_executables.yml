@@ -35,25 +35,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-          architecture: ${{ matrix.arch }}
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
-        shell: bash
 
       - name: Build executable with PyInstaller
         run: |
           pyinstaller --noconfirm --onefile grep-docx.py
-        shell: bash
 
       - name: Prepare artifact filename
         run: |
@@ -67,93 +59,9 @@ jobs:
           fi
         shell: bash
 
-      - name: Commit artifact to artifacts branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # ensure artifacts branch exists locally
-          git fetch origin artifacts || true
-          if git show-ref --verify --quiet refs/heads/artifacts; then
-            git checkout artifacts
-            git reset --hard origin/artifacts || true
-          else
-            git checkout --orphan artifacts
-            git rm -rf . || true
-          fi
-          # copy only this run's built file into path for this matrix
-          mkdir -p artifacts/${{ matrix.platform }}
-          cp -R built/* artifacts/${{ matrix.platform }}/
-          # stage only the artifacts directory to avoid clobbering other files
-          git add -A artifacts/${{ matrix.platform }}
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Add build: ${{ matrix.platform }}-${{ matrix.arch }} - ${{ github.sha }}"
-            git push --set-upstream origin artifacts --force
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-
       - name: Upload build artifact for workflow release step
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.platform }}-${{ matrix.arch }}
-          path: built/*
+          name: grep-docx-${{ matrix.os }}
+          path: dist/*
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          merge-multiple: true
-
-      - name: Show files (debug)
-        run: ls -l
-
-      - name: Make linux and mac files executable
-        run: chmod +x grep-docx-linux-* grep-docx-macos-* || true
-        shell: bash
-
-      - name: Build macOS universal2 binary
-        if: steps.download-artifacts.outcome != 'failure'
-        run: |
-          set -e
-          # require both thin slices to exist
-          if [ -f grep-docx-macos-x64 ] && [ -f grep-docx-macos-arm64 ]; then
-            # ensure Mach-O slices are executable and have correct CPUs
-            chmod +x grep-docx-macos-x64 grep-docx-macos-arm64
-            # create universal binary
-            lipo -create -output grep-docx-macos-universal grep-docx-macos-x64 grep-docx-macos-arm64
-            chmod +x grep-docx-macos-universal
-          else
-            echo "One or both macOS slices missing, skipping lipo; using whichever exists"
-            if [ -f grep-docx-macos-arm64 ]; then
-              cp grep-docx-macos-arm64 grep-docx-macos-universal
-            elif [ -f grep-docx-macos-x64 ]; then
-              cp grep-docx-macos-x64 grep-docx-macos-universal
-            else
-              echo "No macOS builds present"
-            fi
-          fi
-        shell: bash
-
-      - name: Create GitHub Release and upload assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.version }}
-          name: Release ${{ github.event.inputs.version }}
-          draft: false
-          prerelease: false
-          files: |
-            grep-docx-linux-x64
-            grep-docx-linux-arm64
-            grep-docx-windows-x64.exe
-            grep-docx-macos-universal
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
