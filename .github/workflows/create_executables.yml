@@ -56,6 +56,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+          pip install --upgrade pyinstaller
 
       - name: Build executable with PyInstaller
         run: |
@@ -67,10 +68,10 @@ jobs:
           mv dist/grep-docx executables/grep-docx-${{ runner.os }}-${{ runner.arch }}
         shell: bash
 
-      - name: Upload build artifact for workflow release step
+      - name: Upload build artifact for future use (in action summary and available to next steps)
         uses: actions/upload-artifact@v4
         with:
-          name: grep-docx-${{  runner.os  }}-${{ runner.arch }}
+          name: grep-docx-${{ runner.os }}-${{ runner.arch }}
           path: executables/*
 
 
