@@ -2,11 +2,14 @@
 .vscode
 __pycache__
 
-tmp*.*
-*.log
-
 # ignore MacOS crap
 .DS_Store
 
-test
+# ignore tmp files
+tmp*.*
+*.log
 *.bak
+
+# ignore development files
+test
+executables
