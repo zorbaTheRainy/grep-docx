@@ -1,13 +1,15 @@
 # grep-docx
 
-A command-line tool for searching through Microsoft Word (.docx) files using grep-like pattern matching. Written in Python, this tool allows you to search for text patterns across one or multiple .docx files.
+A command-line tool for searching through Microsoft Word (*.docx) files using [grep](https://en.wikipedia.org/wiki/Grep)-like pattern matching. Written in Python, this tool allows you to search for text patterns across one or multiple .docx files.  Non-.docx files are simply ignored.
 
-It will not work on old *.doc (no-X) binary files, used before Office 2007.  Nor, will it work on .dotx (templates) or .domx (macros) files.  This is a limitation of the Python python-docx library.
+`grep-docx` will not work on old *.doc (no-X) binary files, used before Office 2007.  Nor, will it work on *.dotx (templates) or *.domx (macros) files.  This is a limitation of the Python python-docx library.
+
+The basic "line" to search in the Word file is 1 paragraph.  Word files are broken into paragraphs and then searched.  Bulleted lists, etc., are composed of multiple paragraphs.  If you want complex search patterns, plan accordingly.
 
 ## Features
 
 * Search single files or recursively through directories
-* Regular expression pattern matching
+* [Regular expression pattern matching](https://www.regexone.com/)
 * Case-sensitive and case-insensitive search options
 * Colored output highlighting matches
 * Output formatting options including hanging indents
@@ -43,34 +45,34 @@ grep-docx [options] PATTERN PATH
 
 ### Examples
 
-Search a single file:
+Search a single file for the text 'config':
 
 ``` bash
-grep-docx "pattern" document.docx
+grep-docx config document.docx
 ```
 
-Search recursively with case insensitive matching:
+Search folders/directories recursively with case insensitive matching:
 
 ``` bash
-grep-docx -ri "pattern" ./documents/
+grep-docx -ri config ./documents/
 ```
 
-Count matches in a directory:
+Count the number of times in a directory the partial-word 'construc' (e.g., construction, constructable, constructible, etc.) is found in *.docx files:
 
 ``` bash
-grep-docx -c "pattern" ./documents/
+grep-docx -c construc ./documents/
 ```
 
-List files containing matches:
+List files containing the words 'sake' and 'clarification' occur within the same paragraph:
 
 ``` bash
-grep-docx -l "pattern" ./documents/
+grep-docx -l '\bsake\b.*clarification\b|\bclarification\b.*sake\b' ./documents/
 ```
 
 Write output to a file (via STDOUT redirection):
 
 ``` bash
-grep-docx -ri "pattern" ./documents/ > output.txt
+grep-docx -ri config ./documents/ > output.txt
 ```
 
 ## Executables
