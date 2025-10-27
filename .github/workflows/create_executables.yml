@@ -14,6 +14,7 @@ jobs:
   build:
     strategy:
       matrix:
+        # https://github.com/actions/runner-images
         os: [ubuntu-latest, windows-latest, macos-latest]
         arch: [x64, arm64]
     runs-on: ${{ matrix.os }}
@@ -36,13 +37,13 @@ jobs:
       - name: Prepare artifact filename
         run: |
           mkdir -p builds
-          mv dist/grep-docx builds/grep-docx-${{ matrix.os }}-${{ matrix.arch }}
+          mv dist/grep-docx builds/grep-docx-${{ runner.os }}-${{ matrix.arch }}
         shell: bash
 
       - name: Upload build artifact for workflow release step
         uses: actions/upload-artifact@v4
         with:
-          name: grep-docx-${{ matrix.os }}-${{ matrix.arch }}
+          name: grep-docx-${{  runner.os  }}-${{ matrix.arch }}
           path: builds/*
 
       - name: Commit artifact to artifacts branch
@@ -58,15 +59,15 @@ jobs:
             git checkout --orphan artifacts
             git rm -rf . || true
           fi
-          # copy only this run's built file into path for this matrix
-          mkdir -p artifacts/${{ matrix.platform }}
-          cp -R built/* artifacts/${{ matrix.platform }}/
+          # copy only this run's builds/* file into path for this matrix
+          mkdir -p artifacts/${{  runner.os  }}
+          cp -R builds/* artifacts/${{  runner.os  }}/
           # stage only the artifacts directory to avoid clobbering other files
-          git add -A artifacts/${{ matrix.platform }}
+          git add -A artifacts/${{  runner.os  }}
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Add build: ${{ matrix.platform }}-${{ matrix.arch }} - ${{ github.sha }}"
+            git commit -m "Add build: ${{  runner.os  }}-${{ matrix.arch }} - ${{ github.sha }}"
             git push --set-upstream origin artifacts --force
           fi
         env:
