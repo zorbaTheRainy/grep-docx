@@ -14,10 +14,10 @@ jobs:
   build:
     strategy:
       matrix:
-        # https://github.com/actions/runner-images
+        # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
         os: [ubuntu-latest, windows-latest, macos-latest, ubuntu-24.04-arm]
         # archs for *-latest are set based on OS-type (windows & ubuntu are x86; mac is arm)
-        # you have to run partner runners otherwise.
+        # you have to run partner runners otherwise (e.g., ubuntu-24.04-arm).
         # arch: [x64, arm64]
     runs-on: ${{ matrix.os }}
 
@@ -64,14 +64,14 @@ jobs:
       - name: Prepare artifact filename
         run: |
           mkdir -p builds
-          mv dist/grep-docx builds/grep-docx-${{ runner.os }}
+          mv dist/grep-docx executables/grep-docx-${{ runner.os }}-${{ runner.arch }}
         shell: bash
 
       - name: Upload build artifact for workflow release step
         uses: actions/upload-artifact@v4
         with:
-          name: grep-docx-${{  runner.os  }}
-          path: builds/*
+          name: grep-docx-${{  runner.os  }}-${{ runner.arch }}
+          path: executables/*
 
 
   store:
@@ -101,11 +101,13 @@ jobs:
       - name: Set up directories for executables branch
         run: |
           mkdir -p   executables/Windows
-          cp         grep-docx-Windows.exe     executables/Windows/grep-docx.exe
+          cp         grep-docx-Windows*.exe     executables/Windows/grep-docx.exe
           mkdir -p   executables/Linux/x86
-          cp         grep-docx-Linux           executables/Linux/x86/grep-docx
+          cp         grep-docx-Linux-X64        executables/Linux/x86/grep-docx
+          mkdir -p   executables/Linux/ARM
+          cp         grep-docx-Linux-ARM64      executables/Linux/ARM/grep-docx
           mkdir -p   executables/MacOS
-          cp         grep-docx-macOS           executables/MacOS/grep-docx
+          cp         grep-docx-macOS*           executables/MacOS/grep-docx
         shell: bash
 
       # - name: Build macOS universal binary
