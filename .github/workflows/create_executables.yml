@@ -149,7 +149,7 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Add builds for ${{ github.sha }} (trigger: ${{ github.event.inputs.version }})"
-            git push --set-upstream origin artifacts --force-with-lease
+            git push --set-upstream origin executables --force-with-lease
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
