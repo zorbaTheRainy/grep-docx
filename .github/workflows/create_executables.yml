@@ -20,6 +20,20 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Show runner contexts
+        run: |
+          echo "runner.os=${{ runner.os }}"
+          echo "runner.arch=${{ runner.arch }}"
+          echo "matrix.os=${{ matrix.os }}"
+          if ${{ runner.os }} == 'Windows'; then
+            Get-CimInstance Win32_Processor | Select-Object -Property Name,AddressWidth,DataWidth
+            [Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE')
+          else
+            uname -m
+            arch || true
+            lscpu || true
+          fi
+    
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -81,30 +95,31 @@ jobs:
           mkdir -p   executables/Linux/x86         executables/Linux/ARM
           cp         grep-docx-Linux-x64           executables/Linux/x86/grep-docx
           cp         grep-docx-Linux-arm64         executables/Linux/ARM/grep-docx
-          mkdir -p   executables/MacOS/x86         executables/MacOS/ARM
-          cp         grep-docx-MacOS-x64           executables/MacOS/x86/grep-docx
+          # GitHub does not have a MacOS x86 runner (so, this is a false x86 build and should be ignored)
+          mkdir -p                                 executables/MacOS/ARM
+          # cp         grep-docx-MacOS-x64           executables/MacOS/x86/grep-docx
           cp         grep-docx-MacOS-arm64         executables/MacOS/ARM/grep-docx
         shell: bash
 
-      - name: Build macOS universal binary
-        if: steps.download-artifact.outcome != 'failure'
-        run: |
-          set -e
-          # require both thin slices to exist
-          if [ -f grep-docx-MacOS-x64 ] && [ -f grep-docx-MacOS-arm64 ]; then
-            # ensure Mach-O slices are executable and have correct CPUs
-            chmod +x grep-docx-MacOS-x64 grep-docx-MacOS-arm64
-            # create universal binary
-            lipo -create -output grep-docx-MacOS-universal grep-docx-MacOS-x64 grep-docx-MacOS-arm64
-            chmod +x grep-docx-MacOS-universal
-            mkdir -p   executables/MacOS/universal
-            cp         grep-docx-MacOS-universal           executables/MacOS/universal/grep-docx
-          else
-            echo "One or both macOS slices missing, skipping lipo; using whichever exists"
-          fi
-        shell: bash
+      # - name: Build macOS universal binary
+      #   if: steps.download-artifact.outcome != 'failure'
+      #   run: |
+      #     set -e
+      #     # require both thin slices to exist
+      #     if [ -f grep-docx-MacOS-x64 ] && [ -f grep-docx-MacOS-arm64 ]; then
+      #       # ensure Mach-O slices are executable and have correct CPUs
+      #       chmod +x grep-docx-MacOS-x64 grep-docx-MacOS-arm64
+      #       # create universal binary
+      #       lipo -create -output grep-docx-MacOS-universal grep-docx-MacOS-x64 grep-docx-MacOS-arm64
+      #       chmod +x grep-docx-MacOS-universal
+      #       mkdir -p   executables/MacOS/universal
+      #       cp         grep-docx-MacOS-universal           executables/MacOS/universal/grep-docx
+      #     else
+      #       echo "One or both macOS slices missing, skipping lipo; using whichever exists"
+      #     fi
+      #   shell: bash
         
-      - name: Commit artifacts to executables branch (single writer)
+      - name: Commit artifacts to executables branch
         run: |
           set -e
           git config user.name "github-actions[bot]"
