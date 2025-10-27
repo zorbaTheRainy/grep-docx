@@ -46,12 +46,39 @@ jobs:
           name: grep-docx-${{  runner.os  }}-${{ matrix.arch }}
           path: builds/*
 
-      - name: Commit artifact to artifacts branch
+
+ release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Normalize filenames and make executables runnable
         run: |
+          # report what files we got
+          for f in *; do
+            echo "found: $f"
+          done
+          chmod +x grep-docx-linux-* grep-docx-macos-* || true
+        shell: bash
+
+      - name: Commit artifacts to artifacts branch (single writer)
+        run: |
+          set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # ensure artifacts branch exists locally
+
+          # fetch remote artifacts branch if it exists
           git fetch origin artifacts || true
+
           if git show-ref --verify --quiet refs/heads/artifacts; then
             git checkout artifacts
             git reset --hard origin/artifacts || true
@@ -59,16 +86,17 @@ jobs:
             git checkout --orphan artifacts
             git rm -rf . || true
           fi
-          # copy only this run's builds/* file into path for this matrix
-          mkdir -p artifacts/${{  runner.os  }}
-          cp -R builds/* artifacts/${{  runner.os  }}/
-          # stage only the artifacts directory to avoid clobbering other files
-          git add -A artifacts/${{  runner.os  }}
+
+          # copy all downloaded artifacts into artifacts/ and commit once
+          mkdir -p artifacts
+          # downloaded artifacts are in the job workspace root
+          cp -R ./* artifacts/ || true
+          git add -A artifacts
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Add build: ${{  runner.os  }}-${{ matrix.arch }} - ${{ github.sha }}"
-            git push --set-upstream origin artifacts --force
+            git commit -m "Add builds for ${{ github.sha }} (trigger: ${{ github.event.inputs.version }})"
+            git push --set-upstream origin artifacts --force-with-lease
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
