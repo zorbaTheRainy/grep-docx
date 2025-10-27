@@ -49,19 +49,13 @@ jobs:
 
       - name: Prepare artifact filename
         run: |
-          mkdir -p built
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            mv dist/grep-docx.exe built/grep-docx-windows-${{ matrix.arch }}.exe
-          elif [ "${{ matrix.platform }}" = "linux" ]; then
-            mv dist/grep-docx built/grep-docx-linux-${{ matrix.arch }}
-          elif [ "${{ matrix.platform }}" = "macos" ]; then
-            mv dist/grep-docx built/grep-docx-macos-${{ matrix.arch }}
-          fi
+          mkdir -p builds
+          mv dist/grep-docx builds/grep-docx-${{ matrix.platform }}-${{ matrix.arch }}
         shell: bash
 
       - name: Upload build artifact for workflow release step
         uses: actions/upload-artifact@v4
         with:
-          name: grep-docx-${{ matrix.os }}
-          path: dist/*
+          name: grep-docx-${{ matrix.platform }}-${{ matrix.arch }}
+          path: builds/*
 
