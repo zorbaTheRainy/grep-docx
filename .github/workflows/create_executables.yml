@@ -63,7 +63,7 @@ jobs:
 
       - name: Prepare artifact filename
         run: |
-          mkdir -p builds
+          mkdir -p executables
           mv dist/grep-docx executables/grep-docx-${{ runner.os }}-${{ runner.arch }}
         shell: bash
 
