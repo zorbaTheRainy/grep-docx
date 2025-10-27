@@ -16,7 +16,9 @@ jobs:
       matrix:
         # https://github.com/actions/runner-images
         os: [ubuntu-latest, windows-latest, macos-latest]
-        arch: [x64, arm64]
+        # archs are set based on OS-type (windows & ubuntu are x86; mac is arm)
+        # you have to run private runners otherwise.
+        # arch: [x64, arm64]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -49,7 +51,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'         # use latest Python 3 release (recommended)
+          python-version: '3.x'         # use latest Python 3 release
 
       - name: Install dependencies
         run: |
@@ -62,19 +64,19 @@ jobs:
       - name: Prepare artifact filename
         run: |
           mkdir -p builds
-          mv dist/grep-docx builds/grep-docx-${{ runner.os }}-${{ matrix.arch }}
+          mv dist/grep-docx builds/grep-docx-${{ runner.os }}
         shell: bash
 
       - name: Upload build artifact for workflow release step
         uses: actions/upload-artifact@v4
         with:
-          name: grep-docx-${{  runner.os  }}-${{ matrix.arch }}
+          name: grep-docx-${{  runner.os  }}
           path: builds/*
 
 
   store:
     needs: build
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -98,16 +100,12 @@ jobs:
 
       - name: set up directories for executables branch
         run: |
-          mkdir -p   executables/Windows/x86       executables/Windows/ARM
-          cp         grep-docx-Windows-x64.exe     executables/Windows/x86/grep-docx.exe
-          cp         grep-docx-Windows-arm64.exe   executables/Windows/ARM/grep-docx.exe
-          mkdir -p   executables/Linux/x86         executables/Linux/ARM
-          cp         grep-docx-Linux-x64           executables/Linux/x86/grep-docx
-          cp         grep-docx-Linux-arm64         executables/Linux/ARM/grep-docx
-          # GitHub does not have a MacOS x86 runner (so, this is a false x86 build and should be ignored)
-          mkdir -p                                 executables/MacOS/ARM
-          # cp         grep-docx-MacOS-x64           executables/MacOS/x86/grep-docx
-          cp         grep-docx-MacOS-arm64         executables/MacOS/ARM/grep-docx
+          mkdir -p   executables/Windows
+          cp         grep-docx-Windows.exe     executables/Windows/grep-docx.exe
+          mkdir -p   executables/Linux/x86
+          cp         grep-docx-Linux           executables/Linux/x86/grep-docx
+          mkdir -p   executables/MacOS
+          cp         grep-docx-MacOS           executables/MacOS/grep-docx
         shell: bash
 
       # - name: Build macOS universal binary
@@ -137,7 +135,7 @@ jobs:
           # fetch remote executables branch if it exists
           git fetch origin executables || true
 
-          if git show-ref --verify --quiet refs/heads/artifacts; then
+          if git show-ref --verify --quiet refs/heads/executables; then
             git checkout executables
             git reset --hard origin/executables || true
           else
