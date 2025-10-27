@@ -25,6 +25,9 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'         # use latest Python 3 release (recommended)
+          architecture: ${{ matrix.arch }}  # keep this if you use arch in the matrix
 
       - name: Install dependencies
         run: |
@@ -47,9 +50,9 @@ jobs:
           path: builds/*
 
 
-  release:
+  store:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -67,31 +70,60 @@ jobs:
           for f in *; do
             echo "found: $f"
           done
-          chmod +x grep-docx-linux-* grep-docx-macos-* || true
+          chmod +x grep-docx-* || true
+          chmod -x grep-docx-*.exe || true
         shell: bash
 
-      - name: Commit artifacts to artifacts branch (single writer)
+      - name: set up directories for executables branch
+        run: |
+          mkdir -p   executables/Windows/x86       executables/Windows/ARM
+          cp         grep-docx-Windows-x64.exe     executables/Windows/x86/grep-docx.exe
+          cp         grep-docx-Windows-arm64.exe   executables/Windows/ARM/grep-docx.exe
+          mkdir -p   executables/Linux/x86         executables/Linux/ARM
+          cp         grep-docx-Linux-x64           executables/Linux/x86/grep-docx
+          cp         grep-docx-Linux-arm64         executables/Linux/ARM/grep-docx
+          mkdir -p   executables/MacOS/x86         executables/MacOS/ARM
+          cp         grep-docx-MacOS-x64           executables/MacOS/x86/grep-docx
+          cp         grep-docx-MacOS-arm64         executables/MacOS/ARM/grep-docx
+        shell: bash
+
+      - name: Build macOS universal binary
+        if: steps.download-artifact.outcome != 'failure'
+        run: |
+          set -e
+          # require both thin slices to exist
+          if [ -f grep-docx-MacOS-x64 ] && [ -f grep-docx-MacOS-arm64 ]; then
+            # ensure Mach-O slices are executable and have correct CPUs
+            chmod +x grep-docx-MacOS-x64 grep-docx-MacOS-arm64
+            # create universal binary
+            lipo -create -output grep-docx-MacOS-universal grep-docx-MacOS-x64 grep-docx-MacOS-arm64
+            chmod +x grep-docx-MacOS-universal
+            mkdir -p   executables/MacOS/universal
+            cp         grep-docx-MacOS-universal           executables/MacOS/universal/grep-docx
+          else
+            echo "One or both macOS slices missing, skipping lipo; using whichever exists"
+          fi
+        shell: bash
+        
+      - name: Commit artifacts to executables branch (single writer)
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # fetch remote artifacts branch if it exists
-          git fetch origin artifacts || true
+          # fetch remote executables branch if it exists
+          git fetch origin executables || true
 
           if git show-ref --verify --quiet refs/heads/artifacts; then
-            git checkout artifacts
-            git reset --hard origin/artifacts || true
+            git checkout executables
+            git reset --hard origin/executables || true
           else
-            git checkout --orphan artifacts
+            git checkout --orphan executables
             git rm -rf . || true
           fi
 
-          # copy all downloaded artifacts into artifacts/ and commit once
-          mkdir -p artifacts
-          # downloaded artifacts are in the job workspace root
-          cp -R ./* artifacts/ || true
-          git add -A artifacts
+          # copy all downloaded artifacts into executables/ and commit once
+          git add -A executables
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
