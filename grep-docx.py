@@ -13,7 +13,7 @@ from docx import Document # https://python-docx.readthedocs.io/     # Install vi
 
 # --------------------------------
 # Global variables
-VERSION = "0.9.0"
+VERSION = "1.0.0"
 COLORS = { # ANSI color codes
     'BLACK': '30',
     'RED': '31',
