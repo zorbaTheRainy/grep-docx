@@ -25,14 +25,23 @@ jobs:
           echo "runner.os=${{ runner.os }}"
           echo "runner.arch=${{ runner.arch }}"
           echo "matrix.os=${{ matrix.os }}"
-          if ${{ runner.os }} == 'Windows'; then
-            Get-CimInstance Win32_Processor | Select-Object -Property Name,AddressWidth,DataWidth
-            [Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE')
-          else
-            uname -m
-            arch || true
-            lscpu || true
-          fi
+
+      - name: Show Windows CPU info
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-CimInstance Win32_Processor | Select-Object -Property Name,AddressWidth,DataWidth
+          Write-Output "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
+          Write-Output "PROCESSOR_ARCHITEW6432=$env:PROCESSOR_ARCHITEW6432"
+      
+      - name: Show Linux / macOS CPU info
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          uname -a
+          uname -m
+          arch || true
+          if command -v lscpu >/dev/null 2>&1; then lscpu; fi
     
       - name: Checkout repository
         uses: actions/checkout@v4
