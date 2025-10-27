@@ -49,7 +49,7 @@ def parse_args():
     parser.add_argument("-L", "--files-without-matches", action="store_true", help="Only print names of files without matches")
     parser.add_argument("-q", "--quiet", "--silent", action="store_true", help="Suppress all normal output")
     parser.add_argument("-r", "--recursive", action="store_true", help="Recursively search subdirectories")
-    parser.add_argument("-s", "--no-messages", action="store_true", help="Suppress error messages about nonexistent or unreadable files.")
+    parser.add_argument("-s", "--no-messages", action="store_true", help="Suppress error messages about nonexistent or unreadable files")
     parser.add_argument("-T", "--initial-tab", action="store_true", help="Line output starts with a tab character")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
