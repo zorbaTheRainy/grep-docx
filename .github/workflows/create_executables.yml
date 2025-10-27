@@ -1,10 +1,10 @@
-name: Build and Release Executables
+name: Build and Store Executables
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Enter the version (e.g., v1.0.0)"
+        description: "Enter the version (e.g., v1.0.0 or 2025-10-20)"
         required: true
 
 permissions:
@@ -104,10 +104,17 @@ jobs:
           cp         grep-docx-Windows*.exe     executables/Windows/grep-docx.exe
           mkdir -p   executables/Linux/x86
           cp         grep-docx-Linux-X64        executables/Linux/x86/grep-docx
+          chmod +x                              executables/Linux/x86/grep-docx || true
           mkdir -p   executables/Linux/ARM
           cp         grep-docx-Linux-ARM64      executables/Linux/ARM/grep-docx
+          chmod +x                              executables/Linux/ARM/grep-docx || true
           mkdir -p   executables/MacOS
           cp         grep-docx-macOS*           executables/MacOS/grep-docx
+          chmod +x                              executables/MacOS/grep-docx || true
+          mkdir -p   executables/Python
+          cp         requirements.txt           executables/Python/requirements.txt
+          cp         grep-docx.py               executables/Python/grep-docx.py
+          chmod +x                              executables/Python/grep-docx.py || true
         shell: bash
 
       # - name: Build macOS universal binary
