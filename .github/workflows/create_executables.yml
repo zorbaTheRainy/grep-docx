@@ -36,13 +36,13 @@ jobs:
       - name: Prepare artifact filename
         run: |
           mkdir -p builds
-          mv dist/grep-docx builds/grep-docx-${{ matrix.platform }}-${{ matrix.arch }}
+          mv dist/grep-docx builds/grep-docx-${{ matrix.os }}-${{ matrix.arch }}
         shell: bash
 
       - name: Upload build artifact for workflow release step
         uses: actions/upload-artifact@v4
         with:
-          name: grep-docx-${{ matrix.platform }}-${{ matrix.arch }}
+          name: grep-docx-${{ matrix.os }}-${{ matrix.arch }}
           path: builds/*
 
       - name: Commit artifact to artifacts branch
