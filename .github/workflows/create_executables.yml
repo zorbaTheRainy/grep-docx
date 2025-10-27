@@ -15,9 +15,9 @@ jobs:
     strategy:
       matrix:
         # https://github.com/actions/runner-images
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        # archs are set based on OS-type (windows & ubuntu are x86; mac is arm)
-        # you have to run private runners otherwise.
+        os: [ubuntu-latest, windows-latest, macos-latest, ubuntu-24.04-arm]
+        # archs for *-latest are set based on OS-type (windows & ubuntu are x86; mac is arm)
+        # you have to run partner runners otherwise.
         # arch: [x64, arm64]
     runs-on: ${{ matrix.os }}
 
@@ -88,7 +88,7 @@ jobs:
         with:
           merge-multiple: true
 
-      - name: Normalize filenames and make executables runnable
+      - name: Report download results and make executables runnable
         run: |
           # report what files we got
           for f in *; do
@@ -98,7 +98,7 @@ jobs:
           chmod -x grep-docx-*.exe || true
         shell: bash
 
-      - name: set up directories for executables branch
+      - name: Set up directories for executables branch
         run: |
           mkdir -p   executables/Windows
           cp         grep-docx-Windows.exe     executables/Windows/grep-docx.exe
