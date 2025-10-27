@@ -57,13 +57,13 @@ Search folders/directories recursively with case insensitive matching:
 grep-docx -ri config ./documents/
 ```
 
-Count the number of times in a directory the partial-word 'construc' (e.g., construction, constructable, constructible, etc.) is found in *.docx files:
+Count the number of times in a directory the partial-word 'construc' (e.g., construct, misconstruction, constructible, etc.) is found in *.docx files:
 
 ``` bash
 grep-docx -c construc ./documents/
 ```
 
-List files containing the words 'sake' and 'clarification' occur within the same paragraph:
+List files where the words 'sake' and 'clarification' occur within the same paragraph:
 
 ``` bash
 grep-docx -l '\bsake\b.*clarification\b|\bclarification\b.*sake\b' ./documents/
