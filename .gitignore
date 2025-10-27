@@ -12,4 +12,4 @@ tmp*.*
 
 # ignore development files
 test
-# executables
+executables
