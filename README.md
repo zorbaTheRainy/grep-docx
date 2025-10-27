@@ -49,6 +49,7 @@ grep-docx [options] PATTERN PATH
 - `-L, --files-without-matches`: Only print names of files without matches
 - `-q, --quiet, --silent`: Suppress all normal output
 - `-r, --recursive`: Recursively search subdirectories
+- `-s, --no-messages`: Suppress error messages about nonexistent or unreadable files
 - `-T, --initial-tab`: Line output starts with a tab character
 - `-V, --version`: Show program version
 - `--debug`: Enable debug logging
@@ -74,6 +75,13 @@ List files containing matches:
 ```bash
 grep-docx -l "pattern" ./documents/
 ```
+
+## Executables
+
+Compiled executables may be found in the `executables` branch of this repository.
+
+Executables were made for: Windows (x86), MacOS (ARM, i.e., M1+), and LInux (ARM & x86).  You can, of course, run the Python script itself.
+
 
 ## License
 
