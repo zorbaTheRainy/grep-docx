@@ -46,29 +46,29 @@ jobs:
           path: builds/*
 
       - name: Commit artifact to artifacts branch
-          run: |
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            # ensure artifacts branch exists locally
-            git fetch origin artifacts || true
-            if git show-ref --verify --quiet refs/heads/artifacts; then
-              git checkout artifacts
-              git reset --hard origin/artifacts || true
-            else
-              git checkout --orphan artifacts
-              git rm -rf . || true
-            fi
-            # copy only this run's built file into path for this matrix
-            mkdir -p artifacts/${{ matrix.platform }}
-            cp -R built/* artifacts/${{ matrix.platform }}/
-            # stage only the artifacts directory to avoid clobbering other files
-            git add -A artifacts/${{ matrix.platform }}
-            if git diff --cached --quiet; then
-              echo "No changes to commit"
-            else
-              git commit -m "Add build: ${{ matrix.platform }}-${{ matrix.arch }} - ${{ github.sha }}"
-              git push --set-upstream origin artifacts --force
-            fi
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # ensure artifacts branch exists locally
+          git fetch origin artifacts || true
+          if git show-ref --verify --quiet refs/heads/artifacts; then
+            git checkout artifacts
+            git reset --hard origin/artifacts || true
+          else
+            git checkout --orphan artifacts
+            git rm -rf . || true
+          fi
+          # copy only this run's built file into path for this matrix
+          mkdir -p artifacts/${{ matrix.platform }}
+          cp -R built/* artifacts/${{ matrix.platform }}/
+          # stage only the artifacts directory to avoid clobbering other files
+          git add -A artifacts/${{ matrix.platform }}
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add build: ${{ matrix.platform }}-${{ matrix.arch }} - ${{ github.sha }}"
+            git push --set-upstream origin artifacts --force
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
