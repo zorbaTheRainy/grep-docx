@@ -105,7 +105,7 @@ jobs:
           mkdir -p   executables/Linux/x86
           cp         grep-docx-Linux           executables/Linux/x86/grep-docx
           mkdir -p   executables/MacOS
-          cp         grep-docx-MacOS           executables/MacOS/grep-docx
+          cp         grep-docx-macOS           executables/MacOS/grep-docx
         shell: bash
 
       # - name: Build macOS universal binary
