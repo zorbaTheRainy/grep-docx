@@ -85,7 +85,7 @@ Executables were made for:
 
 ##### macOS
 
-* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/tags/v1.0.0/executables/MacOS/grep-docx) \- Apple Silicon \(M1\+\) Binary
+* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/tags/v1.0.0/executables/MacOS/grep-docx) \- Apple Silicon \(M1\+\) binary
 
 ##### Linux
 
