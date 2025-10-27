@@ -27,7 +27,6 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'         # use latest Python 3 release (recommended)
-          architecture: ${{ matrix.arch }}  # keep this if you use arch in the matrix
 
       - name: Install dependencies
         run: |
