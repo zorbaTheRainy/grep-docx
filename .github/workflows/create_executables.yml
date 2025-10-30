@@ -55,7 +55,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements_build.txt
+          pip install -r requirements.txt
           pip install --upgrade pyinstaller
 
       - name: Build executable with PyInstaller
