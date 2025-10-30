@@ -10,10 +10,20 @@ import textwrap    # https://docs.python.org/3/library/textwrap.html
 
 # need to install with pip
 from docx import Document # https://python-docx.readthedocs.io/     # Install via: pip install python-docx
+from tqdm import tqdm     # https://tqdm.github.io/                 # Install via: pip install tqdm
+try:
+    if sys.platform != "win32":
+        from colorama import just_fix_windows_console # https://github.com/tartley/colorama # Install via:  pip install colorama
+        HAVE_COLORAMA = True
+    else:
+        HAVE_COLORAMA = False
+except ImportError:
+    HAVE_COLORAMA = False
+
 
 # --------------------------------
 # Global variables
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 COLORS = { # ANSI color codes
     'BLACK': '30',
     'RED': '31',
@@ -39,7 +49,7 @@ def parse_args():
     """Parses command-line arguments."""
     parser = argparse.ArgumentParser(description="Search for PATTERN in .docx files like grep.")
     parser.add_argument("pattern", help="Regex pattern to search for")
-    parser.add_argument("path", help="File or directory to search")
+    parser.add_argument("paths", nargs="+", help="One or more files or directories to search")
     parser.add_argument("-C", "--color", "--colour", action="store_true", help="Color the prefix and highlight matches")
     parser.add_argument("-c", "--count", action="store_true", help="Only print a count of matching lines")
     parser.add_argument("-H", "--hyperlink", action="store_true", help="The name of each file is printed as a hyperlink that launches Word.  (Your terminal may not support this.)")
@@ -47,6 +57,7 @@ def parse_args():
     parser.add_argument("-i", "--ignore-case", action="store_true", help="Ignore case distinctions")
     parser.add_argument("-l", "--files-with-matches", action="store_true", help="Only print names of files with matches")
     parser.add_argument("-L", "--files-without-matches", action="store_true", help="Only print names of files without matches")
+    parser.add_argument("-P", "--no-progress-bar", action="store_true", help="Do not display the progress bar")
     parser.add_argument("-q", "--quiet", "--silent", action="store_true", help="Suppress all normal output")
     parser.add_argument("-r", "--recursive", action="store_true", help="Recursively search subdirectories")
     parser.add_argument("-s", "--no-messages", action="store_true", help="Suppress error messages about nonexistent or unreadable files")
@@ -67,6 +78,15 @@ def main():
     # turn on logs if requested
     setup_logging(args.debug)
 
+    # normal Windows consoles don't natively display ANSI colors; fix that   ; OS detection is in the subroutine already.
+    if HAVE_COLORAMA:
+        just_fix_windows_console()
+    # if hyperlinks are requested, check if supported; disable if not
+    if args.hyperlink:
+        if not supports_hyperlink():
+            logging.warning("Terminal does not appear to support hyperlinks; disabling --hyperlink.")
+            args.hyperlink = False
+
     # prepare to search
     flags = re.IGNORECASE if args.ignore_case else 0
     regex = re.compile(args.pattern, flags)
@@ -78,24 +98,34 @@ def main():
         "unmatched_files": set(),
     }
     
-    # perform the search
-    path = args.path
-    if os.path.isfile(path):
-        if path.endswith(".docx"):
-            results = process_file(path, regex, args, results)
+    # obtain list of all the files to search from one or more input paths
+    file_list = []
+    for path in args.paths:
+        if not os.path.exists(path):
+            if not (args.quiet or args.no_messages):
+                logging.error(f"Invalid path: {path}")
+            continue
+        file_list.extend(get_file_list(path, args.recursive))
 
-    elif os.path.isdir(path):
-        for root, _, files in os.walk(path):
-            for file in files:
-                if file.endswith(".docx"):
-                    results = process_file(os.path.join(root, file), regex, args, results)
-            if not args.recursive:
-                break
-
-    else:
+    # If no files found across all provided paths, exit
+    if not file_list:
         if not (args.quiet or args.no_messages):
-            logging.error(f"Invalid path: {path}")
+            logging.error("No .docx files found to search.")
         sys.exit(1) # exit with status 1 (failure)
+
+    # setup the progress bar (disabled based on args.quiet and other flags)
+    disable_flag = args.quiet or args.no_progress_bar
+    try:
+        iterator = tqdm( file_list, \
+                    total=len(file_list), \
+                    desc="Searching", \
+                    leave=False, \
+                    unit="file", \
+                    disable=disable_flag)
+        for file in iterator:
+            results = process_file(file, regex, args, results)
+    finally:
+        iterator.close()
 
     #  finally, print results
     print_results(results, args)
@@ -111,6 +141,23 @@ def setup_logging(debug=False):
     """
     level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(format='%(levelname)s: %(message)s', level=level)
+
+def get_file_list(path, recursive):
+    """
+    Return a list of .docx files for the given path.
+    """
+    file_list = []
+    if os.path.isfile(path):
+        if path.endswith(".docx"):
+            file_list.append(path)
+    elif os.path.isdir(path):
+        for root, _, files in os.walk(path):
+            for file in files:
+                if file.endswith(".docx"):
+                    file_list.append(os.path.join(root, file))
+            if not recursive:
+                break
+    return file_list
 
 def process_file(file_path, regex, args, results):
     """Search a single file and update the aggregated results.
@@ -264,10 +311,10 @@ def print_results(results, args):
         sys.exit(1)  # exit with status 1 (failure)
     elif args.files_without_matches:
         if args.hyperlink:
-            for f in unmatched_files:
+            for f in sorted(unmatched_files):
                 print(make_hyperlink(f))
         else:
-            for f in unmatched_files:
+            for f in sorted(unmatched_files):
                 print(f)
     elif args.files_with_matches:
         for f, cnt in matched_files.items():
@@ -287,7 +334,109 @@ def print_results(results, args):
     
     return
 
+def supports_hyperlink():
+    """
+    Detect if the current terminal likely supports OSC 8 hyperlinks.
+    Heuristic priority (high -> low):
+      1. Terminal-specific env markers (DOMTERM, WT_SESSION, KONSOLE_VERSION)
+      2. VTE version check (VTE_VERSION >= 5000)
+      3. TERM_PROGRAM known terminals
+      4. TERM known terminal names
+      5. COLORTERM indicating modern terminal (truecolor/24bit or known name)
 
+    Returns True when it is very likely that OSC 8 will render links.
+    Returns False when non-interactive or when no reliable indicator exists.
+    """
+    # --- If stdout is not a TTY, avoid claiming support (non-interactive).
+    # This mirrors common patterns: hyperlinks are only useful for interactive terminals.
+    if not sys.stdout.isatty():
+        return False
+
+    # --- DOMTERM
+    # DOMTERM is set by DomTerm, a terminal with HTML/OSC capabilities.
+    # Example: DOMTERM=1
+    if "DOMTERM" in os.environ:
+        return True
+
+    # --- Windows Terminal (WT_SESSION)
+    # WT_SESSION is set by Windows Terminal to a GUID-like string when running inside it.
+    # Example: WT_SESSION=\\?\pipe\WindowsTerminal…
+    if "WT_SESSION" in os.environ:
+        return True
+
+    # --- Konsole (KONSOLE_VERSION)
+    # KDE Konsole sets KONSOLE_VERSION; its presence implies Konsole which supports OSC 8.
+    # Example: KONSOLE_VERSION=245.7
+    if "KONSOLE_VERSION" in os.environ:
+        return True
+
+    # --- VTE-based terminals (VTE_VERSION)
+    # GNOME Terminal, Tilix, Guake, and other VTE-based emulators set VTE_VERSION.
+    # Historically, VTE >= 0.50 (reported as 5000) reliably supports OSC 8.
+    vte = os.environ.get("VTE_VERSION")
+    if vte:
+        # Common form is an integer string; try that first.
+        try:
+            parsed =  int(vte)
+        except ValueError:
+            # Fallback: keep only digits (rare cases), then parse
+            digits = "".join(ch for ch in vte if ch.isdigit())
+            if digits:
+                try:
+                    parsed =  int(digits)
+                except ValueError:
+                    parsed =  None
+            return None
+        if parsed is not None and parsed >= 5000:
+            return True
+
+    # --- TERM_PROGRAM
+    # Many frontends set TERM_PROGRAM to identify themselves:
+    #   - "iTerm.app" => iTerm2 on macOS
+    #   - "WezTerm" => WezTerm
+    #   - "Hyper" => Hyper
+    #   - "vscode", "vscode-insiders" => VS Code integrated terminal
+    #   - "terminology" => Enlightenment Terminology
+    term_program = os.environ.get("TERM_PROGRAM", "").strip()
+    if term_program:
+        # Normalized matching for common known-positive terminals.
+        if term_program in {
+            "iTerm.app",
+            "WezTerm",
+            "Hyper",
+            "terminology",
+            "vscode",
+            "vscode-insiders",
+        }:
+            return True
+
+    # --- TERM values that identify specific emulators
+    # Some terminals don't set TERM_PROGRAM but use distinctive TERM values:
+    #   - "xterm-kitty" or "kitty" => kitty terminal
+    #   - "alacritty", "alacritty-direct" => Alacritty
+    #   - "konsole" => Konsole (some distros)
+    term = os.environ.get("TERM", "").strip()
+    if term:
+        if term in {"xterm-kitty", "kitty", "alacritty", "alacritty-direct", "konsole"}:
+            return True
+
+    # --- COLORTERM hints
+    # COLORTERM is often set to "truecolor", "24bit", or a terminal name.
+    # Many modern terminals set COLORTERM; truecolor/24bit suggests modern feature set.
+    colorterm = os.environ.get("COLORTERM", "").lower().strip()
+    if colorterm:
+        if "truecolor" in colorterm or "24bit" in colorterm:
+            return True
+        # Some terminals set their name in COLORTERM, e.g., "xfce4-terminal"
+        if colorterm == "xfce4-terminal":
+            return True
+
+
+    # Default: do not claim hyperlink support.
+    return False
+
+
+    
 # -----------------------------------------------------------------------
 # MAIN
 # -----------------------------------------------------------------------
