@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse    # https://docs.python.org/3/library/argparse.html
+import glob        # https://docs.python.org/3/library/glob.html
 import logging     # https://docs.python.org/3/library/logging.html
 import os          # https://docs.python.org/3/library/os.html
 import re          # https://docs.python.org/3/library/re.html
 import shutil      # https://docs.python.org/3/library/shutil.html
 import sys         # https://docs.python.org/3/library/sys.html
 import textwrap    # https://docs.python.org/3/library/textwrap.html
+import unicodedata # https://docs.python.org/3/library/unicodedata.html
 
 # need to install with pip
 from docx import Document # https://python-docx.readthedocs.io/     # Install via: pip install python-docx
@@ -23,7 +25,7 @@ except ImportError:
 
 # --------------------------------
 # Global variables
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 COLORS = { # ANSI color codes
     'BLACK': '30',
     'RED': '31',
@@ -49,7 +51,7 @@ def parse_args():
     """Parses command-line arguments."""
     parser = argparse.ArgumentParser(description="Search for PATTERN in .docx files like grep.")
     parser.add_argument("pattern", help="Regex pattern to search for")
-    parser.add_argument("paths", nargs="+", help="One or more files or directories to search")
+    parser.add_argument("paths", nargs="+", help="One or more files or directories to search; use - to read paths from stdin (one per line)")
     parser.add_argument("-C", "--color", "--colour", action="store_true", help="Color the prefix and highlight matches")
     parser.add_argument("-c", "--count", action="store_true", help="Only print a count of matching lines")
     parser.add_argument("-H", "--hyperlink", action="store_true", help="The name of each file is printed as a hyperlink that launches Word.  (Your terminal may not support this.)")
@@ -64,6 +66,7 @@ def parse_args():
     parser.add_argument("-T", "--initial-tab", action="store_true", help="Line output starts with a tab character")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--logfile", metavar="FILE", help="Write log output to FILE. Use - for stdin-sourced paths (see paths argument)")
 
     args = parser.parse_args()
     return args
@@ -75,8 +78,8 @@ def main():
     # Parse command line arguments
     args = parse_args()
     
-    # turn on logs if requested
-    setup_logging(args.debug)
+    # turn on logs if requested; also configure file logging if requested
+    setup_logging(args.debug, args.quiet, logfile=args.logfile)
 
     # normal Windows consoles don't natively display ANSI colors; fix that   ; OS detection is in the subroutine already.
     if HAVE_COLORAMA:
@@ -98,20 +101,29 @@ def main():
         "unmatched_files": set(),
     }
     
+    # '-' in paths means "read a list of paths from stdin, one per line".
+    if "-" in args.paths:
+        args.paths.remove("-")
+        for line in sys.stdin:
+            s = line.strip()
+            if s:
+                args.paths.append(s)
+    
     # obtain list of all the files to search from one or more input paths
     file_list = []
     for path in args.paths:
-        if not os.path.exists(path):
-            if not (args.quiet or args.no_messages):
-                logging.error(f"Invalid path: {path}")
-            continue
-        file_list.extend(get_file_list(path, args.recursive))
+        for globed_path in glob.glob(path):
+            if not os.path.exists(globed_path):
+                if not (args.quiet or args.no_messages):
+                    logging.error(f"Invalid path: {globed_path}")
+                continue
+            file_list.extend(get_file_list(globed_path, args.recursive))
 
     # If no files found across all provided paths, exit
     if not file_list:
         if not (args.quiet or args.no_messages):
             logging.error("No .docx files found to search.")
-        sys.exit(1) # exit with status 1 (failure)
+        sys.exit(2) # exit with status 1 (failure with an error)
 
     # setup the progress bar (disabled based on args.quiet and other flags)
     disable_flag = args.quiet or args.no_progress_bar
@@ -131,16 +143,43 @@ def main():
     print_results(results, args)
 
 # -----------------------------------------------------------------------
-def setup_logging(debug=False):
+def setup_logging(debug=False, quiet=False, logfile=None):
     """Configure the root logger.
 
     Args:
         debug (bool): If True sets logging level to DEBUG, otherwise INFO.
-
-    This sets a simple log format of "LEVEL: message".
+        logfile (str|None): If provided, path to a file to append/write logs to.
+                            If None, logs remain on stderr.
     """
     level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=level)
+    handlers = []
+
+    # Console handler (stderr)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+    handlers.append(console_handler)
+
+    # If logfile is provided, add a FileHandler. If logfile is '-', treat that as literal filename '-'
+    if logfile:
+        try:
+            file_handler = logging.FileHandler(logfile, mode="a", encoding="utf-8")
+            file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s: %(message)s', "%Y-%m-%d %H:%M:%S"))
+            handlers.append(file_handler)
+        except Exception as e:
+            # If we cannot open the logfile, still proceed but warn on stderr via basicConfig fallback
+            logging.basicConfig(format='%(levelname)s: %(message)s', level=level)
+            if not quiet:
+                logging.warning(f"Could not open logfile '{logfile}' for writing: {e}")
+            return
+
+    # Apply handlers to root logger
+    root = logging.getLogger()
+    root.setLevel(level)
+    # Remove existing handlers to avoid duplicate messages when re-running in same process
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    for h in handlers:
+        root.addHandler(h)
 
 def get_file_list(path, recursive):
     """
@@ -210,7 +249,10 @@ def search_file(file_path, regex, args):
     try:
         doc = Document(file_path)
         for i, para in enumerate(doc.paragraphs):
-            if regex.search(para.text):
+            # Normalize paragraph text before searching
+            para_text = unicodedata.normalize("NFC", para.text)
+            if regex.search(para_text):
+            # if regex.search(para.text):
                 matched = True
 
                 if args.quiet or args.files_without_matches or (args.files_with_matches and not args.count):
@@ -224,10 +266,10 @@ def search_file(file_path, regex, args):
 
                 if args.color:
                     prefix_colored = colorize(prefix, COLORS['GREEN'])  # Color for prefix
-                    para_text = highlight_matches(para.text, regex.pattern, COLORS['RED'], args.ignore_case) # Color for match
+                    para_text = highlight_matches(para_text, regex.pattern, COLORS['RED'], args.ignore_case) # Color for match
                 else:
                     prefix_colored = prefix
-                    para_text = para.text
+                    # para_text = para.text
 
                 if args.initial_tab:
                     prefix_colored = "\t" + prefix_colored
@@ -307,8 +349,8 @@ def print_results(results, args):
     
     # actually print
     if args.quiet:
-        # if we got here and quiet-mode is on, we found nothing; so, it is a failure
-        sys.exit(1)  # exit with status 1 (failure)
+        # if we got here and quiet-mode is on, we found nothing; so, it is a failure/no match
+        sys.exit(1)  # exit with status 1 (failure / no match)
     elif args.files_without_matches:
         if args.hyperlink:
             for f in sorted(unmatched_files):
