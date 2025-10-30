@@ -2,7 +2,7 @@
 
 A command-line tool for searching through Microsoft Word (*.docx) files using [grep](https://en.wikipedia.org/wiki/Grep)-like pattern matching. Written in Python, this tool allows you to search for text patterns across one or multiple .docx files.  Non-.docx files are simply ignored.
 
-`grep-docx` will not work on old *.doc (no-X) binary files, used before Office 2007.  Nor, will it work on *.dotx (templates) or *.domx (macros) files.  This is a limitation of the Python python-docx library.
+`grep-docx` will not work on old *.doc (no-X) binary files, used before Office 2007.  Nor, will it work on *.dotx (templates) or *.docm (macros) files.  This is a limitation of the Python python-docx library.
 
 The basic "line" to search in the Word file is 1 paragraph.  Word files are broken into paragraphs and then searched.  Bulleted lists, etc., are composed of multiple paragraphs.  If you want complex search patterns, plan accordingly.
 
