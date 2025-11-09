@@ -95,16 +95,16 @@ Executables were made for:
 
 ##### Windows
 
-* [grep-docx.exe](https://github.com/zorbaTheRainy/grep-docx/raw/refs/tags/v1.1.0/executables/Windows/grep-docx.exe) \- Windows 64\-bit Intel executable
+* [grep-docx.exe](https://github.com/zorbaTheRainy/grep-docx/raw/refs/heads/executables/executables/Windows/grep-docx.exe) \- Windows 64\-bit Intel executable
 
 ##### macOS
 
-* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/tags/v1.1.0/executables/MacOS/grep-docx) \- Apple Silicon \(M1\+\) binary
+* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/heads/executables/executables/MacOS/grep-docx) \- Apple Silicon \(M1\+\) binary
 
 ##### Linux
 
-* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/tags/v1.0.0/executables/Linux/x86/grep-docx) \- Linux 64\-bit Intel \(x86\) binary
-* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/tags/v1.0.0/executables/Linux/ARM/grep-docx) \- Linux 64\-bit ARM binary
+* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/heads/executables/executables/Linux/x86/grep-docx) \- Linux 64\-bit Intel \(x86\) binary
+* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/heads/executables/executables/Linux/ARM/grep-docx) \- Linux 64\-bit ARM binary
 
 ### Requirements
 
