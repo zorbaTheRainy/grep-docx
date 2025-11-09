@@ -9,7 +9,6 @@ import shutil      # https://docs.python.org/3/library/shutil.html
 import sys         # https://docs.python.org/3/library/sys.html
 import textwrap    # https://docs.python.org/3/library/textwrap.html
 import unicodedata # https://docs.python.org/3/library/unicodedata.html
-from pathlib import Path # https://docs.python.org/3/library/pathlib.html
 
 # need to install with pip
 from docx import Document # https://python-docx.readthedocs.io/     # Install via: pip install python-docx
@@ -343,8 +342,7 @@ def make_hyperlink(path, label=None):
     - label: visible text; defaults to path
     """
     # Ensure absolute URI
-    # uri = f"file://{os.path.abspath(path)}"
-    uri = Path(path).absolute().as_uri()
+    uri = f"file://{os.path.abspath(path)}"
     label = label or path
     # OSC 8 sequence: \033]8;;URI\033\\TEXT\033]8;;\033\\
     return (
