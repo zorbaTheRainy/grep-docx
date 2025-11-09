@@ -1,0 +1,3 @@
+python-docx
+tqdm
+colorama; sys_platform == "win32"
