@@ -84,11 +84,15 @@ def main():
     if HAVE_COLORAMA:
         just_fix_windows_console()
     # if hyperlinks are requested, check if supported; disable if not
+    args.hyperlink_disabled = False # Set a flag for print_results().  Kind of crappy to add attribute to args.* ad-hoc, but oh well.
     if args.hyperlink:
         if not supports_hyperlink():
-            suggest_terminals_if_no_hyperlink()
-            # logging.warning("Terminal does not appear to support hyperlinks; disabling --hyperlink.")
             args.hyperlink = False
+            # actually, I want this at the end.  Set a flag for print_results() 
+            # if not args.no_messages:
+            #     suggest_terminals_if_no_hyperlink()
+            args.hyperlink_disabled = True
+            
 
     # prepare to search
     flags = re.IGNORECASE if args.ignore_case else 0
@@ -408,6 +412,10 @@ def print_results(results, args):
     else:
         for line in matches:
             print(line)
+
+    if args.hyperlink_disabled:
+        if not (args.no_messages or (args.count and not args.files_with_matches) ):
+            suggest_terminals_if_no_hyperlink()
     
     return
 
@@ -494,19 +502,20 @@ def supports_hyperlink():
     #   - "konsole" => Konsole (some distros)
     term = os.environ.get("TERM", "").strip()
     if term:
+        # print (f"TERM='{term}'") 
         if term in {"xterm-kitty", "kitty", "alacritty", "alacritty-direct", "konsole"}:
             return True
 
     # --- COLORTERM hints
     # COLORTERM is often set to "truecolor", "24bit", or a terminal name.
     # Many modern terminals set COLORTERM; truecolor/24bit suggests modern feature set.
-    colorterm = os.environ.get("COLORTERM", "").lower().strip()
-    if colorterm:
-        if "truecolor" in colorterm or "24bit" in colorterm:
-            return True
-        # Some terminals set their name in COLORTERM, e.g., "xfce4-terminal"
-        if colorterm == "xfce4-terminal":
-            return True
+    # colorterm = os.environ.get("COLORTERM", "").lower().strip()
+    # if colorterm:
+    #     if "truecolor" in colorterm or "24bit" in colorterm:
+    #         return True
+    #     # Some terminals set their name in COLORTERM, e.g., "xfce4-terminal"
+    #     if colorterm == "xfce4-terminal":
+    #         return True
 
 
     # Default: do not claim hyperlink support.
@@ -517,9 +526,10 @@ def suggest_terminals_if_no_hyperlink():
     Prints suggestions  if hyperlinks are not supported
     """
 
-    logging.warning("Your terminal does not appear to support OSC 8 hyperlinks.")
+    logging.warning("Your terminal does not appear to support hyperlinks.")
     logging.warning("Try Windows Terminal — https://github.com/microsoft/terminal")
     logging.warning("Try iTerm2 (macOS)   — https://iterm2.com")
+    logging.warning("Or, just don't use the -H or --hyperlink options.")
 
     return
     
