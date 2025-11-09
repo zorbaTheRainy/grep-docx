@@ -254,46 +254,15 @@ def search_file(file_path, regex, args):
             # Normalize paragraph text before searching
             para_text = unicodedata.normalize("NFC", para.text)
             if regex.search(para_text):
-            # if regex.search(para.text):
                 matched = True
 
+                # Exit early if caller only needs existence or quiet behavior
                 if args.quiet or args.files_without_matches or (args.files_with_matches and not args.count):
                     return matches, matched  # exit ASAP if quiet mode is enabled or all we care about is if there was a match
 
-                if args.hyperlink:
-                    hyper_path = make_hyperlink(file_path)
-                    prefix = f"{hyper_path} [Paragraph {i+1}]: "
-                else:
-                    prefix = f"{file_path} [Paragraph {i+1}]: "
-
-                if args.color:
-                    prefix_colored = colorize(prefix, COLORS['GREEN'])  # Color for prefix
-                    para_text = highlight_matches(para_text, regex.pattern, COLORS['RED'], args.ignore_case) # Color for match
-                else:
-                    prefix_colored = prefix
-                    # para_text = para.text
-
-                if args.initial_tab:
-                    prefix_colored = "\t" + prefix_colored
-
-                if args.hanging_indent:
-                    term_width = shutil.get_terminal_size((80, 20)).columns
-                    wrap_width = term_width - 8
-                    if wrap_width < 20:
-                        wrap_width = 20  # minimum width to avoid overly narrow wrapping
-                    indent = "\t"
-                    wrapped_text = textwrap.fill(
-                        para_text,
-                        width=wrap_width,
-                        initial_indent=indent,
-                        subsequent_indent=indent,
-                        break_on_hyphens=False
-                    )
-                    formatted_line = prefix_colored + os.linesep + wrapped_text
-                    matches.append(formatted_line)
-                else:
-                    formatted_line = prefix_colored + para_text
-                    matches.append(formatted_line)
+                # Build the formatted line using the helper that defers color/hyperlink
+                formatted_line = format_matched_paragraph(file_path, para_text, regex, args, i)
+                matches.append(formatted_line)
 
                 logging.debug(f"Match found in {file_path} at paragraph {i+1}")
     except Exception as e:
@@ -301,6 +270,67 @@ def search_file(file_path, regex, args):
             logging.error(f"Error reading {file_path}: {e}")
 
     return matches, matched
+
+def format_matched_paragraph(file_path, para_text, regex, args, para_index):
+    """
+    Build a single formatted match line for display.
+
+    - Do wrapping and indentation on plain text (no color or hyperlink codes).
+    - After wrapping/indenting is done, apply hyperlinking to the prefix (if requested)
+      and apply color/highlighting to the prefix and matched text (if requested).
+    - Returns a single formatted string ready to print.
+    """
+
+    # --------------------------------------------------
+    # Perform all indent actions base don the text withOUT color/hyperlink codes (codes effect sizing calculations)
+
+    # Prefix (throwaway for prefix width calculations)
+    # plain_prefix = f"{file_path} [Paragraph {para_index+1}]: "
+    # if args.initial_tab:
+    #     plain_prefix = "\t" + plain_prefix
+
+    # Hanging indent: wrap the plain body using the visible prefix length
+    if args.hanging_indent:
+        term_width = shutil.get_terminal_size((80, 20)).columns
+        # visible_prefix_len = len(plain_prefix)
+        margin = 8  # extra margin to avoid edge overflow (use 2 tabs)
+        # wrap_width = max(20, term_width - visible_prefix_len - margin) # now that we put a newline after the filename, the prefix width is not longer needed
+        wrap_width = max(20, term_width - margin)
+        indent = "\t"
+        para_text = textwrap.fill(
+            para_text,
+            width=wrap_width,
+            initial_indent=indent,
+            subsequent_indent=indent,
+            break_on_hyphens=False
+        )
+
+    # --------------------------------------------------
+    # Now that the sizing is done, apply the color/hyperlink codes
+
+    # Build the display prefix (may include hyperlink)
+    if args.hyperlink:
+        display_prefix = f"{make_hyperlink(file_path)} [Paragraph {para_index+1}]: "
+    else:
+        display_prefix = f"{file_path} [Paragraph {para_index+1}]: "
+    # Initial tab indent (the real one this time)
+    if args.initial_tab:
+        display_prefix = "\t" + display_prefix
+
+    # Apply color/highlighting after wrapping/indenting
+    if args.color:
+        display_prefix = colorize(display_prefix, COLORS['GREEN'])
+        display_body = highlight_matches(para_text, regex.pattern, COLORS['RED'], args.ignore_case)
+    else:
+        display_body = para_text
+
+    # Combine prefix and body using the same layout as the plain version
+    if args.hanging_indent:
+        formatted = display_prefix + os.linesep + display_body
+    else:
+        formatted = display_prefix + display_body
+
+    return formatted
 
 def make_hyperlink(path, label=None):
     """
