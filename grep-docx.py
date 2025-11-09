@@ -24,7 +24,7 @@ except ImportError:
 
 # --------------------------------
 # Global variables
-VERSION = "1.0.9"
+VERSION = "1.1.0"
 COLORS = { # ANSI color codes
     'BLACK': '30',
     'RED': '31',
