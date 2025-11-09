@@ -9,23 +9,22 @@ import shutil      # https://docs.python.org/3/library/shutil.html
 import sys         # https://docs.python.org/3/library/sys.html
 import textwrap    # https://docs.python.org/3/library/textwrap.html
 import unicodedata # https://docs.python.org/3/library/unicodedata.html
+from pathlib import Path # https://docs.python.org/3/library/pathlib.html
 
 # need to install with pip
 from docx import Document # https://python-docx.readthedocs.io/     # Install via: pip install python-docx
 from tqdm import tqdm     # https://tqdm.github.io/                 # Install via: pip install tqdm
 try:
-    if sys.platform != "win32":
-        from colorama import just_fix_windows_console # https://github.com/tartley/colorama # Install via:  pip install colorama
-        HAVE_COLORAMA = True
-    else:
-        HAVE_COLORAMA = False
+    # only needed for Windows.  Put in requirements.txt  --> colorama; sys_platform == "win32"
+    from colorama import just_fix_windows_console # https://github.com/tartley/colorama # Install via:  pip install colorama
+    HAVE_COLORAMA = True
 except ImportError:
     HAVE_COLORAMA = False
 
 
 # --------------------------------
 # Global variables
-VERSION = "1.2.0"
+VERSION = "1.0.9"
 COLORS = { # ANSI color codes
     'BLACK': '30',
     'RED': '31',
@@ -87,7 +86,8 @@ def main():
     # if hyperlinks are requested, check if supported; disable if not
     if args.hyperlink:
         if not supports_hyperlink():
-            logging.warning("Terminal does not appear to support hyperlinks; disabling --hyperlink.")
+            suggest_terminals_if_no_hyperlink()
+            # logging.warning("Terminal does not appear to support hyperlinks; disabling --hyperlink.")
             args.hyperlink = False
 
     # prepare to search
@@ -123,7 +123,7 @@ def main():
     if not file_list:
         if not (args.quiet or args.no_messages):
             logging.error("No .docx files found to search.")
-        sys.exit(2) # exit with status 1 (failure with an error)
+        sys.exit(2) # exit with status 2 (failure with an error)
 
     # setup the progress bar (disabled based on args.quiet and other flags)
     disable_flag = args.quiet or args.no_progress_bar
@@ -137,7 +137,8 @@ def main():
         for file in iterator:
             results = process_file(file, regex, args, results)
     finally:
-        iterator.close()
+        if iterator is not None:
+            iterator.close()
 
     #  finally, print results
     print_results(results, args)
@@ -187,12 +188,13 @@ def get_file_list(path, recursive):
     """
     file_list = []
     if os.path.isfile(path):
-        if path.endswith(".docx"):
+        base = os.path.basename(path)
+        if path.lower().endswith(".docx") and (not base.lower().startswith("~$")):
             file_list.append(path)
     elif os.path.isdir(path):
         for root, _, files in os.walk(path):
             for file in files:
-                if file.endswith(".docx"):
+                if file.lower().endswith(".docx") and (not file.lower().startswith("~$")):
                     file_list.append(os.path.join(root, file))
             if not recursive:
                 break
@@ -277,6 +279,8 @@ def search_file(file_path, regex, args):
                 if args.hanging_indent:
                     term_width = shutil.get_terminal_size((80, 20)).columns
                     wrap_width = term_width - 8
+                    if wrap_width < 20:
+                        wrap_width = 20  # minimum width to avoid overly narrow wrapping
                     indent = "\t"
                     wrapped_text = textwrap.fill(
                         para_text,
@@ -305,7 +309,8 @@ def make_hyperlink(path, label=None):
     - label: visible text; defaults to path
     """
     # Ensure absolute URI
-    uri = f"file://{os.path.abspath(path)}"
+    # uri = f"file://{os.path.abspath(path)}"
+    uri = Path(path).absolute().as_uri()
     label = label or path
     # OSC 8 sequence: \033]8;;URI\033\\TEXT\033]8;;\033\\
     return (
@@ -428,7 +433,7 @@ def supports_hyperlink():
                     parsed =  int(digits)
                 except ValueError:
                     parsed =  None
-            return None
+            return False
         if parsed is not None and parsed >= 5000:
             return True
 
@@ -477,7 +482,16 @@ def supports_hyperlink():
     # Default: do not claim hyperlink support.
     return False
 
+def suggest_terminals_if_no_hyperlink():
+    """
+    Prints suggestions  if hyperlinks are not supported
+    """
 
+    logging.warning("Your terminal does not appear to support OSC 8 hyperlinks.")
+    logging.warning("Try Windows Terminal — https://github.com/microsoft/terminal")
+    logging.warning("Try iTerm2 (macOS)   — https://iterm2.com")
+
+    return
     
 # -----------------------------------------------------------------------
 # MAIN
