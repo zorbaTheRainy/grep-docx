@@ -8,7 +8,9 @@ import re          # https://docs.python.org/3/library/re.html
 import shutil      # https://docs.python.org/3/library/shutil.html
 import sys         # https://docs.python.org/3/library/sys.html
 import textwrap    # https://docs.python.org/3/library/textwrap.html
+import types       # https://docs.python.org/3/library/types.html
 import unicodedata # https://docs.python.org/3/library/unicodedata.html
+from urllib.request import pathname2url
 
 # need to install with pip
 from docx import Document # https://python-docx.readthedocs.io/     # Install via: pip install python-docx
@@ -64,7 +66,7 @@ def parse_args():
     parser.add_argument("-T", "--initial-tab", action="store_true", help="Line output starts with a tab character")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    parser.add_argument("--logfile", metavar="FILE", help="Write log output to FILE. Use - for stdin-sourced paths (see paths argument)")
+    parser.add_argument("--logfile", metavar="FILE", help="Write log output to FILE")
 
     args = parser.parse_args()
     return args
@@ -75,23 +77,28 @@ def main():
 
     # Parse command line arguments
     args = parse_args()
-    
+
     # turn on logs if requested; also configure file logging if requested
     setup_logging(args.debug, args.quiet, logfile=args.logfile)
+
+    # Enforce mutually exclusive flags
+    if args.files_with_matches and args.files_without_matches:
+        logging.error("Error: -l/--files-with-matches and -L/--files-without-matches are mutually exclusive.")
+        sys.exit(2)
+
 
     # normal Windows consoles don't natively display ANSI colors; fix that   ; OS detection is in the subroutine already.
     if HAVE_COLORAMA:
         just_fix_windows_console()
+
     # if hyperlinks are requested, check if supported; disable if not
-    args.hyperlink_disabled = False # Set a flag for print_results().  Kind of crappy to add attribute to args.* ad-hoc, but oh well.
+    # Wrap args in a config object with additional fields
+    args = types.SimpleNamespace(**vars(args), hyperlink_disabled=False)
     if args.hyperlink:
         if not supports_hyperlink():
             args.hyperlink = False
-            # actually, I want this at the end.  Set a flag for print_results() 
-            # if not args.no_messages:
-            #     suggest_terminals_if_no_hyperlink()
             args.hyperlink_disabled = True
-            
+            logging.info("Hyperlink support is disabled because the terminal does not support it.")
 
     # prepare to search
     flags = re.IGNORECASE if args.ignore_case else 0
@@ -116,10 +123,6 @@ def main():
     file_list = []
     for path in args.paths:
         for globed_path in glob.glob(path):
-            if not os.path.exists(globed_path):
-                if not (args.quiet or args.no_messages):
-                    logging.error(f"Invalid path: {globed_path}")
-                continue
             file_list.extend(get_file_list(globed_path, args.recursive))
 
     # If no files found across all provided paths, exit
@@ -170,10 +173,13 @@ def setup_logging(debug=False, quiet=False, logfile=None):
             file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s: %(message)s', "%Y-%m-%d %H:%M:%S"))
             handlers.append(file_handler)
         except Exception as e:
-            # If we cannot open the logfile, still proceed but warn on stderr via basicConfig fallback
-            logging.basicConfig(format='%(levelname)s: %(message)s', level=level)
+            # If we cannot open the logfile, still proceed but warn the user
+            root = logging.getLogger()
+            root.setLevel(level)
+            if not root.handlers:
+                logging.basicConfig(format='%(levelname)s: %(message)s', level=level)
             if not quiet:
-                logging.warning(f"Could not open logfile '{logfile}' for writing: {e}")
+                logging.error(f"Could not open logfile '{logfile}' for writing: {e}")
             return
 
     # Apply handlers to root logger
@@ -261,16 +267,25 @@ def search_file(file_path, regex, args):
 
                 # Exit early if caller only needs existence or quiet behavior
                 if args.quiet or args.files_without_matches or (args.files_with_matches and not args.count):
-                    return matches, matched  # exit ASAP if quiet mode is enabled or all we care about is if there was a match
+                    # exit ASAP if quiet mode is enabled or all we care about is if there was a match
+                    return matches, matched
+
+                # Skip formatting work if only counts are needed (--files-with-matches --count)
+                if args.files_with_matches and args.count:
+                    logging.debug(f"Match found in {file_path} at paragraph {i+1}")
+                    continue
 
                 # Build the formatted line using the helper that defers color/hyperlink
                 formatted_line = format_matched_paragraph(file_path, para_text, regex, args, i)
                 matches.append(formatted_line)
 
                 logging.debug(f"Match found in {file_path} at paragraph {i+1}")
-    except Exception as e:
+    except (OSError, IOError) as e:
         if not (args.quiet or args.no_messages):
             logging.error(f"Error reading {file_path}: {e}")
+    except Exception as e:
+        # Unexpected errors (programming bugs) - log with traceback
+        logging.exception(f"Unexpected error reading {file_path}:")
 
     return matches, matched
 
@@ -286,11 +301,6 @@ def format_matched_paragraph(file_path, para_text, regex, args, para_index):
 
     # --------------------------------------------------
     # Perform all indent actions base don the text withOUT color/hyperlink codes (codes effect sizing calculations)
-
-    # Prefix (throwaway for prefix width calculations)
-    # plain_prefix = f"{file_path} [Paragraph {para_index+1}]: "
-    # if args.initial_tab:
-    #     plain_prefix = "\t" + plain_prefix
 
     # Hanging indent: wrap the plain body using the visible prefix length
     if args.hanging_indent:
@@ -323,13 +333,13 @@ def format_matched_paragraph(file_path, para_text, regex, args, para_index):
     # Apply color/highlighting after wrapping/indenting
     if args.color:
         display_prefix = colorize(display_prefix, COLORS['GREEN'])
-        display_body = highlight_matches(para_text, regex.pattern, COLORS['RED'], args.ignore_case)
+        display_body = highlight_matches(para_text, regex, COLORS['RED'])
     else:
         display_body = para_text
 
     # Combine prefix and body using the same layout as the plain version
     if args.hanging_indent:
-        formatted = display_prefix + os.linesep + display_body
+        formatted = display_prefix + "\n" + display_body
     else:
         formatted = display_prefix + display_body
 
@@ -337,12 +347,12 @@ def format_matched_paragraph(file_path, para_text, regex, args, para_index):
 
 def make_hyperlink(path, label=None):
     """
-    Wrap `path` in an OSC 8 hyperlink sequence.
+    Wrap `path` in an OSC 8 hyperlink sequence (RFC 8089).
     - path: filesystem path to your .docx
     - label: visible text; defaults to path
     """
-    # Ensure absolute URI
-    uri = f"file://{os.path.abspath(path)}"
+    abs_path = os.path.abspath(path)
+    uri = f"file://{pathname2url(abs_path)}"
     label = label or path
     # OSC 8 sequence: \033]8;;URI\033\\TEXT\033]8;;\033\\
     return (
@@ -355,10 +365,8 @@ def colorize(text, color_code):
     """Wrap text in ANSI color codes."""
     return f"\033[{color_code}m{text}\033[0m"
 
-def highlight_matches(text, pattern, color_code, ignore_case):
-    """Highlight all matches of pattern in text with the given color, respecting case sensitivity."""
-    flags = re.IGNORECASE if ignore_case else 0
-    regex = re.compile(pattern, flags)
+def highlight_matches(text, regex, color_code):
+    """Highlight all matches of regex in text with the given color."""
     def replacer(match):
         return colorize(match.group(0), color_code)
     return regex.sub(replacer, text)
@@ -420,114 +428,57 @@ def print_results(results, args):
 def supports_hyperlink():
     """
     Detect if the current terminal likely supports OSC 8 hyperlinks.
-    Heuristic priority (high -> low):
+    Heuristic checks (in priority order):
       1. Terminal-specific env markers (DOMTERM, WT_SESSION, KONSOLE_VERSION)
       2. VTE version check (VTE_VERSION >= 5000)
       3. TERM_PROGRAM known terminals
       4. TERM known terminal names
-      5. COLORTERM indicating modern terminal (truecolor/24bit or known name)
 
     Returns True when it is very likely that OSC 8 will render links.
     Returns False when non-interactive or when no reliable indicator exists.
     """
-    # --- If stdout is not a TTY, avoid claiming support (non-interactive).
-    # This mirrors common patterns: hyperlinks are only useful for interactive terminals.
     if not sys.stdout.isatty():
         return False
 
-    # --- DOMTERM
-    # DOMTERM is set by DomTerm, a terminal with HTML/OSC capabilities.
-    # Example: DOMTERM=1
     if "DOMTERM" in os.environ:
         return True
 
-    # --- Windows Terminal (WT_SESSION)
-    # WT_SESSION is set by Windows Terminal to a GUID-like string when running inside it.
-    # Example: WT_SESSION=\\?\pipe\WindowsTerminal…
     if "WT_SESSION" in os.environ:
         return True
 
-    # --- Konsole (KONSOLE_VERSION)
-    # KDE Konsole sets KONSOLE_VERSION; its presence implies Konsole which supports OSC 8.
-    # Example: KONSOLE_VERSION=245.7
     if "KONSOLE_VERSION" in os.environ:
         return True
 
-    # --- VTE-based terminals (VTE_VERSION)
-    # GNOME Terminal, Tilix, Guake, and other VTE-based emulators set VTE_VERSION.
-    # Historically, VTE >= 0.50 (reported as 5000) reliably supports OSC 8.
     vte = os.environ.get("VTE_VERSION")
     if vte:
-        # Common form is an integer string; try that first.
-        try:
-            parsed =  int(vte)
-        except ValueError:
-            # Fallback: keep only digits (rare cases), then parse
-            digits = "".join(ch for ch in vte if ch.isdigit())
-            if digits:
-                try:
-                    parsed =  int(digits)
-                except ValueError:
-                    parsed =  None
-            return False
-        if parsed is not None and parsed >= 5000:
-            return True
+        digits = "".join(ch for ch in vte if ch.isdigit())
+        if digits:
+            try:
+                parsed = int(digits)
+                if parsed >= 5000:
+                    return True
+            except ValueError:
+                pass
 
-    # --- TERM_PROGRAM
-    # Many frontends set TERM_PROGRAM to identify themselves:
-    #   - "iTerm.app" => iTerm2 on macOS
-    #   - "WezTerm" => WezTerm
-    #   - "Hyper" => Hyper
-    #   - "vscode", "vscode-insiders" => VS Code integrated terminal
-    #   - "terminology" => Enlightenment Terminology
     term_program = os.environ.get("TERM_PROGRAM", "").strip()
-    if term_program:
-        # Normalized matching for common known-positive terminals.
-        if term_program in {
-            "iTerm.app",
-            "WezTerm",
-            "Hyper",
-            "terminology",
-            "vscode",
-            "vscode-insiders",
-        }:
-            return True
+    if term_program in {"iTerm.app", "WezTerm", "Hyper", "terminology", "vscode", "vscode-insiders"}:
+        return True
 
-    # --- TERM values that identify specific emulators
-    # Some terminals don't set TERM_PROGRAM but use distinctive TERM values:
-    #   - "xterm-kitty" or "kitty" => kitty terminal
-    #   - "alacritty", "alacritty-direct" => Alacritty
-    #   - "konsole" => Konsole (some distros)
     term = os.environ.get("TERM", "").strip()
-    if term:
-        # print (f"TERM='{term}'") 
-        if term in {"xterm-kitty", "kitty", "alacritty", "alacritty-direct", "konsole"}:
-            return True
+    if term in {"xterm-kitty", "kitty", "alacritty", "alacritty-direct", "konsole"}:
+        return True
 
-    # --- COLORTERM hints
-    # COLORTERM is often set to "truecolor", "24bit", or a terminal name.
-    # Many modern terminals set COLORTERM; truecolor/24bit suggests modern feature set.
-    # colorterm = os.environ.get("COLORTERM", "").lower().strip()
-    # if colorterm:
-    #     if "truecolor" in colorterm or "24bit" in colorterm:
-    #         return True
-    #     # Some terminals set their name in COLORTERM, e.g., "xfce4-terminal"
-    #     if colorterm == "xfce4-terminal":
-    #         return True
-
-
-    # Default: do not claim hyperlink support.
     return False
 
 def suggest_terminals_if_no_hyperlink():
     """
-    Prints suggestions  if hyperlinks are not supported
+    Prints suggestions if hyperlinks are not supported
     """
 
-    logging.warning("Your terminal does not appear to support hyperlinks.")
-    logging.warning("Try Windows Terminal — https://github.com/microsoft/terminal")
-    logging.warning("Try iTerm2 (macOS)   — https://iterm2.com")
-    logging.warning("Or, just don't use the -H or --hyperlink options.")
+    logging.info("Your terminal does not appear to support hyperlinks.")
+    logging.info("Try Windows Terminal - https://github.com/microsoft/terminal")
+    logging.info("Try iTerm2 (macOS)   - https://iterm2.com")
+    logging.info("Or, just don't use the -H or --hyperlink options.")
 
     return
     
