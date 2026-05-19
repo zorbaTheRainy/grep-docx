@@ -10,6 +10,7 @@ import sys         # https://docs.python.org/3/library/sys.html
 import textwrap    # https://docs.python.org/3/library/textwrap.html
 import types       # https://docs.python.org/3/library/types.html
 import unicodedata # https://docs.python.org/3/library/unicodedata.html
+import zipfile     # https://docs.python.org/3/library/zipfile.html
 from urllib.request import pathname2url
 
 # need to install with pip
@@ -25,7 +26,7 @@ except ImportError:
 
 # --------------------------------
 # Global variables
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 COLORS = { # ANSI color codes
     'BLACK': '30',
     'RED': '31',
@@ -134,11 +135,11 @@ def main():
     # setup the progress bar (disabled based on args.quiet and other flags)
     disable_flag = args.quiet or args.no_progress_bar
     try:
-        iterator = tqdm( file_list, \
-                    total=len(file_list), \
-                    desc="Searching", \
-                    leave=False, \
-                    unit="file", \
+        iterator = tqdm( file_list,
+                    total=len(file_list),
+                    desc="Searching",
+                    leave=False,
+                    unit="file",
                     disable=disable_flag)
         for file in iterator:
             results = process_file(file, regex, args, results)
@@ -255,8 +256,43 @@ def search_file(file_path, regex, args):
         list: List of matching lines with hanging indent formatting and color.
         bool: True if any match found, False otherwise.
     """
+    
+    # init return vars
     matches = []
     matched = False
+
+    # normalize filepath, mostly for MacOS
+    file_path = os.path.normpath(file_path)
+
+    # perform some basic error handling around file access
+    if not os.path.exists(file_path):
+        if not (args.quiet or args.no_messages):
+            logging.error(f"File not found: {file_path}")
+        return matches, matched
+    if not os.path.isfile(file_path):
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Not a file: {file_path}")
+        return matches, matched
+    if not os.access(file_path, os.R_OK):
+        if not (args.quiet or args.no_messages):
+            logging.error(f"File not readable: {file_path}")
+        return matches, matched
+    
+    # OneDrive or other cloud services may put placeholder files that errors when accessed
+    if os.path.getsize(file_path) == 0:
+        if not (args.quiet or args.no_messages):
+            logging.error(f"File is empty (possibly a Cloud storage placeholder that is not downloaded): {file_path}")
+        return matches, matched
+    
+    # may be named *.docx but actually be a different format
+    if not zipfile.is_zipfile(file_path):
+        if not (args.quiet or args.no_messages):
+            logging.error(f"File is either encrypted, corrupted, or not a valid .docx: {file_path}")
+        return matches, matched
+
+
+
+
     try:
         doc = Document(file_path)
         for i, para in enumerate(doc.paragraphs):
@@ -283,6 +319,10 @@ def search_file(file_path, regex, args):
     except (OSError, IOError) as e:
         if not (args.quiet or args.no_messages):
             logging.error(f"Error reading {file_path}: {e}")
+    except KeyError as e:
+        # This can happen with certain malformed .docx files that are missing expected XML parts
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Error processing {file_path}: Missing expected content. The file may be corrupted or not a valid .docx.")
     except Exception as e:
         # Unexpected errors (programming bugs) - log with traceback
         logging.exception(f"Unexpected error reading {file_path}:")
