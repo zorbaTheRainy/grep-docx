@@ -9,7 +9,11 @@ __pycache__
 tmp*.*
 *.log
 *.bak
+.backups
 
 # ignore development files
 test
 executables
+
+# ignore local notes
+/notes
