@@ -1,11 +1,10 @@
-name: Build and Store Executables
+name: Build Executables
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Enter the version (e.g., v1.0.0 or 2025-10-20)"
-        required: true
 
 permissions:
   contents: write
@@ -14,44 +13,33 @@ jobs:
   build:
     strategy:
       matrix:
-        # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
-        os: [ubuntu-latest, windows-latest, macos-latest, ubuntu-24.04-arm]
-        # archs for *-latest are set based on OS-type (windows & ubuntu are x86; mac is arm)
-        # you have to run partner runners otherwise (e.g., ubuntu-24.04-arm).
-        # arch: [x64, arm64]
+        include:
+          - os: windows-latest
+            archive: zip
+            binary_name: grep-docx.exe
+            archive_name: grep-docx-windows-x64
+          - os: macos-latest
+            archive: tar.gz
+            binary_name: grep-docx
+            archive_name: grep-docx-macos-arm64
+          - os: ubuntu-latest
+            archive: tar.gz
+            binary_name: grep-docx
+            archive_name: grep-docx-linux-x64
+          - os: ubuntu-24.04-arm
+            archive: tar.gz
+            binary_name: grep-docx
+            archive_name: grep-docx-linux-arm64
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Show runner contexts
-        run: |
-          echo "runner.os=${{ runner.os }}"
-          echo "runner.arch=${{ runner.arch }}"
-          echo "matrix.os=${{ matrix.os }}"
-
-      - name: Show Windows CPU info
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Get-CimInstance Win32_Processor | Select-Object -Property Name,AddressWidth,DataWidth
-          Write-Output "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
-          Write-Output "PROCESSOR_ARCHITEW6432=$env:PROCESSOR_ARCHITEW6432"
-      
-      - name: Show Linux / macOS CPU info
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          uname -a
-          uname -m
-          arch || true
-          if command -v lscpu >/dev/null 2>&1; then lscpu; fi
-    
       - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.x'         # use latest Python 3 release
+          python-version: '3.x'
 
       - name: Install dependencies
         run: |
@@ -62,105 +50,33 @@ jobs:
         run: |
           pyinstaller --noconfirm --onefile grep-docx.py
 
-      - name: Prepare artifact filename
+      - name: Set permissions and create archive (Linux / macOS)
+        if: runner.os != 'Windows'
         run: |
-          mkdir -p executables
-          mv dist/grep-docx executables/grep-docx-${{ runner.os }}-${{ runner.arch }}
-        shell: bash
+          chmod 555 dist/${{ matrix.binary_name }}
+          mkdir -p staging
+          cp dist/${{ matrix.binary_name }} staging/${{ matrix.binary_name }}
+          tar czf ${{ matrix.archive_name }}.tar.gz -C staging .
 
-      - name: Upload build artifact for future use (in action summary and available to next steps)
+      - name: Set permissions and create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path staging
+          Copy-Item dist\${{ matrix.binary_name }} staging\${{ matrix.binary_name }}
+          Compress-Archive -Path staging\* -DestinationPath ${{ matrix.archive_name }}.zip -Force
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: grep-docx-${{ runner.os }}-${{ runner.arch }}
-          path: executables/*
+          name: ${{ matrix.archive_name }}
+          path: ${{ matrix.archive_name }}.${{ matrix.archive }}
 
-
-  store:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: true
-
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v8
-        with:
-          merge-multiple: true
-
-      - name: Report download results and make executables runnable
+      - name: Upload to GitHub Release (tag push only)
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          # report what files we got
-          for f in *; do
-            echo "found: $f"
-          done
-          chmod +x grep-docx-* || true
-          chmod -x grep-docx-*.exe || true
-        shell: bash
-
-      - name: Set up directories for executables branch
-        run: |
-          mkdir -p   executables/Windows
-          cp         grep-docx-Windows*.exe     executables/Windows/grep-docx.exe
-          mkdir -p   executables/Linux/x86
-          cp         grep-docx-Linux-X64        executables/Linux/x86/grep-docx
-          chmod +x                              executables/Linux/x86/grep-docx || true
-          mkdir -p   executables/Linux/ARM
-          cp         grep-docx-Linux-ARM64      executables/Linux/ARM/grep-docx
-          chmod +x                              executables/Linux/ARM/grep-docx || true
-          mkdir -p   executables/MacOS
-          cp         grep-docx-macOS*           executables/MacOS/grep-docx
-          chmod +x                              executables/MacOS/grep-docx || true
-          mkdir -p   executables/Python
-          cp         requirements.txt           executables/Python/requirements.txt
-          cp         grep-docx.py               executables/Python/grep-docx.py
-          chmod +x                              executables/Python/grep-docx.py || true
-        shell: bash
-
-      # - name: Build macOS universal binary
-      #   if: steps.download-artifact.outcome != 'failure'
-      #   run: |
-      #     set -e
-      #     # require both thin slices to exist
-      #     if [ -f grep-docx-MacOS-x64 ] && [ -f grep-docx-MacOS-arm64 ]; then
-      #       # ensure Mach-O slices are executable and have correct CPUs
-      #       chmod +x grep-docx-MacOS-x64 grep-docx-MacOS-arm64
-      #       # create universal binary
-      #       lipo -create -output grep-docx-MacOS-universal grep-docx-MacOS-x64 grep-docx-MacOS-arm64
-      #       chmod +x grep-docx-MacOS-universal
-      #       mkdir -p   executables/MacOS/universal
-      #       cp         grep-docx-MacOS-universal           executables/MacOS/universal/grep-docx
-      #     else
-      #       echo "One or both macOS slices missing, skipping lipo; using whichever exists"
-      #     fi
-      #   shell: bash
-        
-      - name: Commit artifacts to executables branch
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # fetch remote executables branch if it exists
-          git fetch origin executables || true
-
-          if git show-ref --verify --quiet refs/heads/executables; then
-            git checkout executables
-            git reset --hard origin/executables || true
-          else
-            git checkout --orphan executables
-            git rm -rf . || true
-          fi
-
-          # copy all downloaded artifacts into executables/ and commit once
-          git add -A executables
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Add builds for ${{ github.sha }} (trigger: ${{ github.event.inputs.version }})"
-            git push --set-upstream origin executables --force-with-lease
-          fi
+          gh release upload "${{ github.ref_name }}" \
+            "${{ matrix.archive_name }}.${{ matrix.archive }}" \
+            --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
