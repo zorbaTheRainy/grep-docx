@@ -6,7 +6,6 @@ A command-line tool for searching through Microsoft Word files using [grep](http
 
 **Note**: `.doc` file support requires Python 3.11+ and the [legacy-doc](https://github.com/lcorrigan704/legacy-doc) package. If not available, `.doc` files are silently skipped.
 
-The basic "line" to search in the Word file is 1 paragraph.  Word files are broken into paragraphs and then searched.  Bulleted lists, etc., are composed of multiple paragraphs.  If you want complex search patterns, plan accordingly.
 
 ## Features
 
@@ -20,6 +19,8 @@ The basic "line" to search in the Word file is 1 paragraph.  Word files are brok
 - Progress bar for large searches
 - Debug logging support
 - Read paths from stdin
+
+The basic "line" to search in the Word file is 1 paragraph.  Word files are broken into paragraphs and then searched.  Bulleted lists, etc., are composed of multiple paragraphs.  If you want complex search patterns, plan accordingly.
 
 ## Installation
 
@@ -68,7 +69,7 @@ Search folders/directories recursively with case insensitive matching:
 grep-docx -ri config ./documents/
 ```
 
-Count the number of times in a directory the partial-word 'construc' (e.g., construct, misconstruction, constructible, etc.) is found in *.docx files:
+Count the number of times in a directory the partial-word 'construc' (e.g., construct, misconstruction, constructible, etc.) is found in Word files:
 
 ``` bash
 grep-docx -c construc ./documents/
@@ -84,6 +85,12 @@ Write output to a file (via STDOUT redirection):
 
 ``` bash
 grep-docx -ri config ./documents/ > output.txt
+```
+
+My favourite settings:
+
+``` bash
+grep-docx.py -iHIrs --colour config *
 ```
 
 ## Executables
@@ -141,12 +148,6 @@ or
 ``` bash
 pip install -r requirements.txt
 ```
-
-For `.doc` file support (requires Python 3.11+):
-``` bash
-pip install legacy-doc
-```
-
 
 3. Run the script.
 
