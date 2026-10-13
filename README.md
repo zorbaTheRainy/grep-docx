@@ -1,11 +1,10 @@
 # grep-docx
 
-A command-line tool for searching through Microsoft Word (*.docx) files using [grep](https://en.wikipedia.org/wiki/Grep)-like pattern matching. 
+A command-line tool for searching through Microsoft Word files using [grep](https://en.wikipedia.org/wiki/Grep)-like pattern matching. 
 
-**Note**: This tool will not work on:
-- Old .doc (pre-Office 2007) binary files
-- .dotx template files
-- .docm macro-enabled files
+**Supported formats**: `.docx`, `.dotx`, `.docm`, and `.doc` (pre-Office 2007).
+
+**Note**: `.doc` file support requires Python 3.11+ and the [legacy-doc](https://github.com/lcorrigan704/legacy-doc) package. If not available, `.doc` files are silently skipped.
 
 The basic "line" to search in the Word file is 1 paragraph.  Word files are broken into paragraphs and then searched.  Bulleted lists, etc., are composed of multiple paragraphs.  If you want complex search patterns, plan accordingly.
 
@@ -89,22 +88,20 @@ grep-docx -ri config ./documents/ > output.txt
 
 ## Executables
 
-Compiled executables may be found in the `executables` branch of this repository.
-
-Executables were made for:
+Compiled executables are available in the [latest release](https://github.com/zorbaTheRainy/grep-docx/releases/latest).
 
 ##### Windows
 
-* [grep-docx.exe](https://github.com/zorbaTheRainy/grep-docx/raw/refs/heads/executables/executables/Windows/grep-docx.exe) \- Windows 64\-bit Intel executable
+* [grep-docx-windows-x64.zip](https://github.com/zorbaTheRainy/grep-docx/releases/latest/download/grep-docx-windows-x64.zip) \- Windows 64\-bit Intel executable
 
 ##### macOS
 
-* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/heads/executables/executables/MacOS/grep-docx) \- Apple Silicon \(M1\+\) binary
+* [grep-docx-macos-arm64.tar.gz](https://github.com/zorbaTheRainy/grep-docx/releases/latest/download/grep-docx-macos-arm64.tar.gz) \- Apple Silicon \(M1\+\) binary
 
 ##### Linux
 
-* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/heads/executables/executables/Linux/x86/grep-docx) \- Linux 64\-bit Intel \(x86\) binary
-* [grep-docx](https://github.com/zorbaTheRainy/grep-docx/raw/refs/heads/executables/executables/Linux/ARM/grep-docx) \- Linux 64\-bit ARM binary
+* [grep-docx-linux-x64.tar.gz](https://github.com/zorbaTheRainy/grep-docx/releases/latest/download/grep-docx-linux-x64.tar.gz) \- Linux 64\-bit Intel \(x86\) binary
+* [grep-docx-linux-arm64.tar.gz](https://github.com/zorbaTheRainy/grep-docx/releases/latest/download/grep-docx-linux-arm64.tar.gz) \- Linux 64\-bit ARM binary
 
 ### Requirements
 
@@ -113,10 +110,11 @@ Executables were made for:
 
 ### Installation
 
-1. Download
-2. For Linux or MacOS, `chmod +x grep-docx`
-3. MacOS, as the binary is not signed with a Developer account, it will require special permissions.  MacOS will walk you through this if you read the dialog box instructions.
-4. Run
+1. Download the archive for your platform from the [latest release](https://github.com/zorbaTheRainy/grep-docx/releases/latest)
+2. Extract the archive
+3. For Linux or macOS, `chmod +x grep-docx`
+4. macOS: as the binary is not signed with a Developer account, it will require special permissions.  macOS will walk you through this if you read the dialog box instructions.
+5. Run
 
 ## Native Script
 
@@ -127,7 +125,9 @@ A simple Python script, ready to run.
 * Python 3.x
 * [python-docx](https://github.com/python-openxml/python-docx) library
 * [tqdm](https://tqdm.github.io/) library
+* (optional, Python 3.11+) [legacy-doc](https://github.com/lcorrigan704/legacy-doc) library for `.doc` support
 * (optional & Windows only) [colorama](https://github.com/tartley/colorama) library
+
 
 ### Installation
 
@@ -140,6 +140,11 @@ pip install python-docx tqdm
 or
 ``` bash
 pip install -r requirements.txt
+```
+
+For `.doc` file support (requires Python 3.11+):
+``` bash
+pip install legacy-doc
 ```
 
 

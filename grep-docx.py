@@ -10,6 +10,7 @@ import sys         # https://docs.python.org/3/library/sys.html
 import textwrap    # https://docs.python.org/3/library/textwrap.html
 import types       # https://docs.python.org/3/library/types.html
 import unicodedata # https://docs.python.org/3/library/unicodedata.html
+import xml.etree.ElementTree as ET  # https://docs.python.org/3/library/xml.etree.elementtree.html
 import zipfile     # https://docs.python.org/3/library/zipfile.html
 from urllib.request import pathname2url
 
@@ -23,10 +24,16 @@ try:
 except ImportError:
     HAVE_COLORAMA = False
 
+try:
+    from legacy_doc import extract_text as legacy_doc_extract_text
+    HAVE_LEGACY_DOC = True
+except ImportError:
+    HAVE_LEGACY_DOC = False
+
 
 # --------------------------------
 # Global variables
-VERSION = "1.1.1"
+VERSION = "1.2.0"
 COLORS = { # ANSI color codes
     'BLACK': '30',
     'RED': '31',
@@ -50,7 +57,7 @@ COLORS = { # ANSI color codes
 # -----------------------------------------------------------------------
 def parse_args():
     """Parses command-line arguments."""
-    parser = argparse.ArgumentParser(description="Search for PATTERN in .docx files like grep.")
+    parser = argparse.ArgumentParser(description="Search for PATTERN in .docx, .dotx, .docm, and .doc files like grep.")
     parser.add_argument("pattern", help="Regex pattern to search for")
     parser.add_argument("paths", nargs="+", help="One or more files or directories to search; use - to read paths from stdin (one per line)")
     parser.add_argument("-C", "--color", "--colour", action="store_true", help="Color the prefix and highlight matches")
@@ -101,6 +108,10 @@ def main():
             args.hyperlink_disabled = True
             logging.info("Hyperlink support is disabled because the terminal does not support it.")
 
+    # check for legacy-doc support
+    if not HAVE_LEGACY_DOC:
+        logging.info(".doc file support requires Python 3.11+ and the legacy-doc package (pip install legacy-doc)")
+
     # prepare to search
     flags = re.IGNORECASE if args.ignore_case else 0
     regex = re.compile(args.pattern, flags)
@@ -129,7 +140,7 @@ def main():
     # If no files found across all provided paths, exit
     if not file_list:
         if not (args.quiet or args.no_messages):
-            logging.error("No .docx files found to search.")
+            logging.error("No Word files found to search.")
         sys.exit(2) # exit with status 2 (failure with an error)
 
     # setup the progress bar (disabled based on args.quiet and other flags)
@@ -194,17 +205,18 @@ def setup_logging(debug=False, quiet=False, logfile=None):
 
 def get_file_list(path, recursive):
     """
-    Return a list of .docx files for the given path.
+    Return a list of .docx, .dotx, .docm, and .doc files for the given path.
     """
+    WORD_EXTENSIONS = (".docx", ".dotx", ".docm", ".doc")
     file_list = []
     if os.path.isfile(path):
         base = os.path.basename(path)
-        if path.lower().endswith(".docx") and (not base.lower().startswith("~$")):
+        if path.lower().endswith(WORD_EXTENSIONS) and (not base.lower().startswith("~$")):
             file_list.append(path)
     elif os.path.isdir(path):
         for root, _, files in os.walk(path):
             for file in files:
-                if file.lower().endswith(".docx") and (not file.lower().startswith("~$")):
+                if file.lower().endswith(WORD_EXTENSIONS) and (not file.lower().startswith("~$")):
                     file_list.append(os.path.join(root, file))
             if not recursive:
                 break
@@ -245,10 +257,10 @@ def process_file(file_path, regex, args, results):
 
 def search_file(file_path, regex, args):
     """
-    Searches a single .docx file for matches to the regex pattern.
+    Searches a single Word file for matches to the regex pattern.
 
     Args:
-        file_path (str): Path to the .docx file.
+        file_path (str): Path to the Word file (.docx, .dotx, .docm, or .doc).
         regex (re.Pattern): Compiled regex pattern.
         args (Namespace): Parsed command-line arguments.
 
@@ -284,20 +296,35 @@ def search_file(file_path, regex, args):
             logging.error(f"File is empty (possibly a Cloud storage placeholder that is not downloaded): {file_path}")
         return matches, matched
     
-    # may be named *.docx but actually be a different format
-    if not zipfile.is_zipfile(file_path):
+    is_legacy_doc = file_path.lower().endswith(".doc")
+    is_template = file_path.lower().endswith((".dotx", ".docm"))
+
+    # .doc files are OLE format, not ZIP; skip zipfile check for them
+    if not is_legacy_doc and not zipfile.is_zipfile(file_path):
         if not (args.quiet or args.no_messages):
-            logging.error(f"File is either encrypted, corrupted, or not a valid .docx: {file_path}")
+            logging.error(f"File is either encrypted, corrupted, or not a valid Word file: {file_path}")
         return matches, matched
 
-
-
+    # .doc files require legacy-doc
+    if is_legacy_doc and not HAVE_LEGACY_DOC:
+        return matches, matched
 
     try:
-        doc = Document(file_path)
-        for i, para in enumerate(doc.paragraphs):
+        if is_legacy_doc:
+            paragraphs = _extract_doc_paragraphs(file_path, args)
+            if paragraphs is None:
+                return matches, matched
+        elif is_template:
+            paragraphs = _extract_xml_paragraphs(file_path, args)
+            if paragraphs is None:
+                return matches, matched
+        else:
+            doc = Document(file_path)
+            paragraphs = [p.text for p in doc.paragraphs]
+
+        for i, para_text in enumerate(paragraphs):
             # Normalize paragraph text before searching
-            para_text = unicodedata.normalize("NFC", para.text)
+            para_text = unicodedata.normalize("NFC", para_text)
             if regex.search(para_text):
                 matched = True
 
@@ -319,15 +346,77 @@ def search_file(file_path, regex, args):
     except (OSError, IOError) as e:
         if not (args.quiet or args.no_messages):
             logging.error(f"Error reading {file_path}: {e}")
+    except ValueError as e:
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Error processing {file_path}: {e}")
     except KeyError as e:
         # This can happen with certain malformed .docx files that are missing expected XML parts
         if not (args.quiet or args.no_messages):
-            logging.error(f"Error processing {file_path}: Missing expected content. The file may be corrupted or not a valid .docx.")
+            logging.error(f"Error processing {file_path}: Missing expected content. The file may be corrupted or not a valid Word file.")
     except Exception as e:
         # Unexpected errors (programming bugs) - log with traceback
         logging.exception(f"Unexpected error reading {file_path}:")
 
     return matches, matched
+
+def _extract_doc_paragraphs(file_path, args):
+    """
+    Extract paragraphs from a .doc file using legacy-doc.
+
+    Returns a list of paragraph strings, or None on failure.
+    """
+    try:
+        with open(file_path, "rb") as f:
+            result = legacy_doc_extract_text(f.read())
+        return result.text.split("\n")
+    except (OSError, IOError) as e:
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Error reading {file_path}: {e}")
+        return None
+    except Exception as e:
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Error processing {file_path}: {e}")
+        return None
+
+def _extract_xml_paragraphs(file_path, args):
+    """
+    Extract paragraphs from .dotx or .docm files by parsing the XML directly.
+
+    python-docx rejects these files due to content type validation,
+    so we parse the ZIP/XML directly.
+
+    Returns a list of paragraph strings, or None on failure.
+    """
+    WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    try:
+        with zipfile.ZipFile(file_path, "r") as zf:
+            with zf.open("word/document.xml") as doc_xml:
+                tree = ET.parse(doc_xml)
+        root = tree.getroot()
+        paragraphs = []
+        for p in root.iter(f"{WORD_NS}p"):
+            texts = []
+            for t in p.iter(f"{WORD_NS}t"):
+                if t.text:
+                    texts.append(t.text)
+            paragraphs.append("".join(texts))
+        return paragraphs
+    except (OSError, IOError) as e:
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Error reading {file_path}: {e}")
+        return None
+    except KeyError as e:
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Error processing {file_path}: Missing expected content. The file may be corrupted.")
+        return None
+    except ET.ParseError as e:
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Error parsing XML in {file_path}: {e}")
+        return None
+    except Exception as e:
+        if not (args.quiet or args.no_messages):
+            logging.error(f"Error processing {file_path}: {e}")
+        return None
 
 def format_matched_paragraph(file_path, para_text, regex, args, para_index):
     """
