@@ -1,3 +1,4 @@
 python-docx>=0.8.11,<1.0
 tqdm>=4.62.0,<5.0
 colorama>=0.4.4,<1.0; sys_platform == "win32"
+legacy-doc>=0.2.1; python_version >= "3.11"
